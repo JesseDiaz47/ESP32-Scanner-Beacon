@@ -13,6 +13,10 @@
 // Legal note: passive WiFi scanning is legal everywhere. BLE advertising is legal
 //             everywhere. DO NOT add deauth/jamming — that is illegal.
 //
+// Reflashing: USB is only needed once. After that, `pio run -e ota -t upload`
+// pushes firmware over WiFi (see platformio.ini). OTA requires two app
+// partitions, which is why this uses min_spiffs.csv and not huge_app.csv.
+//
 // Known behavior (not a bug): the ESP32 has ONE radio shared by the AP and the
 // scanner. Each scan hops all 14 channels for ~2s, during which the AP stops
 // beaconing and the phone's HTTP fetch may fail. The page catches that and keeps
@@ -20,10 +24,18 @@
 
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ArduinoOTA.h>
 #include <BLEDevice.h>
 #include <BLEAdvertising.h>
 #include <BLEUtils.h>
 #include <BLEUUID.h>
+
+// secrets.h is gitignored and holds OTA_PASSWORD (+ optional STA credentials).
+// Build still succeeds without it, but refuses to expose an unauthenticated
+// OTA endpoint on an open access point.
+#if __has_include("secrets.h")
+  #include "secrets.h"
+#endif
 
 // ─── Pin map ────────────────────────────────────────────────────────────────
 constexpr uint8_t PIN_WIFI_LED = 2;   // onboard blue LED — scan heartbeat
@@ -54,6 +66,10 @@ size_t        g_entryCount     = 0;
 bool          g_scanInProgress = false;
 unsigned long g_lastScanStart  = 0;
 unsigned long g_wifiLedOnAt    = 0;     // 0 = LED is off
+// Set while a firmware upload is in flight. A WiFi scan knocks the radio off
+// the AP's channel for ~2s, which is fatal to an upload in progress, so
+// scanning is suspended for the duration.
+volatile bool g_otaActive      = false;
 constexpr unsigned long SCAN_INTERVAL_MS = 10000;  // scan every 10s
 constexpr unsigned long LED_FLASH_MS     = 120;
 
@@ -155,6 +171,7 @@ setInterval(tick, 3000);
 // ─── Forward declarations ───────────────────────────────────────────────────
 void setup_wifi_ap();
 void setup_ble_beacon();
+void setup_ota();
 void start_scan();
 void handle_scan_json();
 void handle_root();
@@ -172,6 +189,7 @@ void setup() {
 
   setup_wifi_ap();
   setup_ble_beacon();
+  setup_ota();
 
   server.on("/", HTTP_GET, handle_root);
   server.on("/scan.json", HTTP_GET, handle_scan_json);
@@ -182,9 +200,12 @@ void setup() {
 }
 
 void loop() {
+  ArduinoOTA.handle();
   server.handleClient();
 
-  if (!g_scanInProgress && (millis() - g_lastScanStart > SCAN_INTERVAL_MS)) {
+  // Never start a scan mid-upload — see g_otaActive.
+  if (!g_otaActive && !g_scanInProgress &&
+      (millis() - g_lastScanStart > SCAN_INTERVAL_MS)) {
     start_scan();
   }
 
@@ -242,6 +263,14 @@ void setup_wifi_ap() {
     return;
   }
   Serial.printf("[ap] SSID=%s  IP=%s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
+
+#if defined(WIFI_STA_SSID) && defined(WIFI_STA_PASS)
+  // Optional: also join a real network so OTA works without the uploading
+  // machine leaving it. Non-blocking — the AP and the beacon must come up
+  // regardless of whether this network is in range.
+  WiFi.begin(WIFI_STA_SSID, WIFI_STA_PASS);
+  Serial.printf("[sta] joining %s (non-blocking)\n", WIFI_STA_SSID);
+#endif
 }
 
 // ─── BLE iBeacon setup ──────────────────────────────────────────────────────
@@ -316,6 +345,72 @@ void setup_ble_beacon() {
 
   Serial.printf("[ble] iBeacon started — UUID=%s  major=%u  minor=%u  tx=%d\n",
                 IBEACON_UUID, IBEACON_MAJOR, IBEACON_MINOR, IBEACON_TX_POWER);
+}
+
+// ─── OTA ────────────────────────────────────────────────────────────────────
+// Upload over the board's own AP (192.168.4.1) — no infrastructure, so it works
+// in the desert as well as at the bench. If secrets.h defines WIFI_STA_SSID the
+// board also joins that network, and OTA is reachable on both addresses.
+void setup_ota() {
+#ifndef OTA_PASSWORD
+  Serial.println("[ota] DISABLED — no OTA_PASSWORD in secrets.h.");
+  Serial.println("[ota] The AP is open; an unauthenticated OTA endpoint on it would let");
+  Serial.println("[ota] anyone in radio range flash this board. Copy include/secrets.example.h.");
+  return;
+#else
+  ArduinoOTA.setHostname("jesse-scanner");
+  ArduinoOTA.setPassword(OTA_PASSWORD);
+
+  ArduinoOTA.onStart([]() {
+    g_otaActive = true;
+    // Stop the scanner: an in-flight scan would take the radio off-channel and
+    // kill the transfer. Drop any pending async result too.
+    if (g_scanInProgress) {
+      WiFi.scanDelete();
+      g_scanInProgress = false;
+    }
+    // Quiet the BLE radio for the duration. Both radios competing during a
+    // ~1.5MB transfer is needless risk, and the board reboots straight after.
+    BLEDevice::getAdvertising()->stop();
+    digitalWrite(PIN_BLE_LED, LOW);
+    Serial.println("\n[ota] upload started — scanner and beacon suspended");
+  });
+
+  ArduinoOTA.onProgress([](unsigned int done, unsigned int total) {
+    static int lastPct = -1;
+    int pct = total ? (int)((done * 100UL) / total) : 0;
+    if (pct != lastPct && pct % 10 == 0) {
+      lastPct = pct;
+      Serial.printf("[ota] %d%%\n", pct);
+    }
+    digitalWrite(PIN_WIFI_LED, (done / 16384) & 1);  // flicker while writing
+  });
+
+  ArduinoOTA.onEnd([]() {
+    Serial.println("[ota] done — rebooting into the new firmware");
+    digitalWrite(PIN_WIFI_LED, LOW);
+  });
+
+  ArduinoOTA.onError([](ota_error_t e) {
+    // Recover rather than sit dead with the scanner switched off.
+    g_otaActive = false;
+    BLEDevice::getAdvertising()->start();
+    const char* msg = "unknown";
+    switch (e) {
+      case OTA_AUTH_ERROR:    msg = "auth failed (wrong --auth password)"; break;
+      case OTA_BEGIN_ERROR:   msg = "begin failed (image too big for the partition?)"; break;
+      case OTA_CONNECT_ERROR: msg = "connect failed"; break;
+      case OTA_RECEIVE_ERROR: msg = "receive failed"; break;
+      case OTA_END_ERROR:     msg = "end failed"; break;
+    }
+    Serial.printf("[ota] ERROR: %s — scanner and beacon resumed\n", msg);
+  });
+
+  ArduinoOTA.begin();
+  Serial.printf("[ota] ready, password set — %s", WiFi.softAPIP().toString().c_str());
+  if (WiFi.status() == WL_CONNECTED) Serial.printf(" and %s", WiFi.localIP().toString().c_str());
+  Serial.println(" (pio run -e ota -t upload)");
+#endif
 }
 
 // ─── WiFi scan ──────────────────────────────────────────────────────────────

@@ -1,2 +1,9 @@
 .pio/
 .vscode/
+.DS_Store
+
+# Holds the OTA password (and optionally home WiFi credentials). The example
+# header is committed; this one never is. Note: unlike esp32-pca9685-demo's
+# config.h, this file holds NO calibration or geometry — only secrets — so
+# excluding it loses nothing but the secret.
+include/secrets.h
