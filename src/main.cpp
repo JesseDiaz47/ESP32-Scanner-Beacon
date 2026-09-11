@@ -46,7 +46,9 @@ struct ScanEntry {
   uint8_t channel;
   bool    encrypted;
 };
-constexpr size_t MAX_ENTRIES = 32;
+// Hardware run 2026-09-10 saw 31 networks in one sweep — 32 was about to clip.
+// RAM is only 17.9% used, so this is cheap headroom.
+constexpr size_t MAX_ENTRIES = 64;
 ScanEntry g_entries[MAX_ENTRIES];
 size_t        g_entryCount     = 0;
 bool          g_scanInProgress = false;
