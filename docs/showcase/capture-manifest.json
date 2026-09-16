@@ -15,15 +15,15 @@
       "file": "networks.png",
       "viewport": [
         780,
-        1843
+        883
       ],
       "pixels": [
         1560,
-        3686
+        1766
       ],
       "tab": "wifi",
-      "sha256": "a9290775a8ab981c2bfdcf46134d41eed9702798132a851796f76d2ec0956e83",
-      "bytes": 329295
+      "sha256": "d66556f726a03d06f12c3650ec3f4021c781e3b27d7035e5ad64a9934488642f",
+      "bytes": 170001
     },
     {
       "file": "channels.png",
@@ -43,43 +43,43 @@
       "file": "bluetooth.png",
       "viewport": [
         780,
-        1812
+        872
       ],
       "pixels": [
         1560,
-        3624
+        1744
       ],
       "tab": "ble",
-      "sha256": "1dda4164308d68243499b988de4f7b5e1819b0bffb642c706759467a00e2a9c4",
-      "bytes": 393325
+      "sha256": "836ca3794ac47810c449da55f64f17d768cb2c7f19db08d0350f8fef112fc2a8",
+      "bytes": 207557
     },
     {
       "file": "heatmap.png",
       "viewport": [
         780,
-        1002
+        879
       ],
       "pixels": [
         1560,
-        2004
+        1758
       ],
       "tab": "heatmap",
-      "sha256": "b25e98386935921c949fb469d8a2356aed8bdba0fc58b934fa3808afe595a50d",
-      "bytes": 222909
+      "sha256": "7dd53e2d078cba7e66cba2c8aad280de3d3e9393509934a2dbb696ebb14d7411",
+      "bytes": 201172
     },
     {
       "file": "phone.png",
       "viewport": [
         390,
-        1857
+        824
       ],
       "pixels": [
         780,
-        3714
+        1648
       ],
       "tab": "wifi",
-      "sha256": "b858b7ff3b1122b61b612ee41f268ae01a88366c35f7439086ea0cd74291d778",
-      "bytes": 306688
+      "sha256": "c86ddc7f96d63e485a3c97d08399d7633a3b40ce458848a95c0eff7505f86c3f",
+      "bytes": 145731
     },
     {
       "file": "cover.png",
@@ -92,8 +92,8 @@
         900
       ],
       "tab": "composition",
-      "sha256": "62ab57b8fa4824f934546a9eeb374c13d93b516c5354d7b85f0d3037bdeaa550",
-      "bytes": 171115
+      "sha256": "ae2ce296463626e7f8192a8605f2d19eb5a6202bce05a3adc38a9e12cb58abdc",
+      "bytes": 173050
     }
   ],
   "checks": [

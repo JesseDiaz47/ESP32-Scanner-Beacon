@@ -21,7 +21,7 @@ Rendering the real UI is still not the same as hardware acceptance testing; see 
 <tr>
 <td width="50%" valign="top">
 <h3>01 · Nearby networks</h3>
-<p>Sort nearby networks by signal strength. See the SSID, channel, encryption indicator, and RSSI in one view. Shown: 39 real networks, strongest <b>&minus;21 dBm</b>, weakest <b>&minus;96 dBm</b>, 4 hidden.</p>
+<p>Sort nearby networks by signal strength. See the SSID, channel, encryption indicator, and RSSI in one view. Captured: 39 real networks, strongest <b>&minus;21 dBm</b>, weakest <b>&minus;96 dBm</b>, 4 hidden.</p>
 <a href="docs/images/networks.png"><img src="docs/images/networks.png" alt="Networks tab showing 39 real SSIDs from a live capture, sorted strongest first" width="100%"></a>
 </td>
 <td width="50%" valign="top">
@@ -33,7 +33,7 @@ Rendering the real UI is still not the same as hardware acceptance testing; see 
 <tr>
 <td width="50%" valign="top">
 <h3>03 · Bluetooth discovery</h3>
-<p>Request a five-second passive BLE scan. View advertised names, addresses, RSSI, and manufacturer IDs. The iBeacon pauses during discovery. Shown: 28 real advertisers, only <b>4 named</b> — most modern phones advertise a rotating address and nothing else.</p>
+<p>Request a five-second passive BLE scan. View advertised names, addresses, RSSI, and manufacturer IDs. The iBeacon pauses during discovery. Captured: 28 real advertisers, only <b>4 named</b> — most modern phones advertise a rotating address and nothing else.</p>
 <a href="docs/images/bluetooth.png"><img src="docs/images/bluetooth.png" alt="Bluetooth tab showing 28 real BLE advertisers with addresses, signal levels and manufacturer IDs" width="100%"></a>
 </td>
 <td width="50%" valign="top">

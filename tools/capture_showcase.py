@@ -31,6 +31,31 @@ MEDIA = ROOT / "docs/images"
 SHOWCASE = ROOT / "docs/showcase"
 
 
+# A real capture puts 39 networks in one table. Fitting the viewport to the
+# whole shell then yields a ~3700px ribbon that reads as a sliver in the README
+# gallery, so shots are capped — cut just under a row boundary, never mid-row.
+MAX_SHOT_HEIGHT = 900
+MAX_PHONE_HEIGHT = 844
+
+
+def fitted_height(page, max_height):
+    """Full shell height when it fits, otherwise the last row boundary above the cap."""
+    bottom = page.locator(".shell").evaluate("el => el.getBoundingClientRect().bottom")
+    full = math.ceil(bottom + 24)
+    if full <= max_height:
+        return full
+    cut = page.evaluate("""limit => {
+      let best = 0;
+      for (const row of document.querySelectorAll('.shell tr')) {
+        if (row.offsetParent === null) continue;          // hidden tab
+        const edge = row.getBoundingClientRect().bottom;
+        if (edge <= limit && edge > best) best = edge;
+      }
+      return best;
+    }""", max_height)
+    return math.ceil(cut) if cut else max_height
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--fixtures", default="fixtures.json",
@@ -137,8 +162,7 @@ def main():
                     f"document.getElementById('heatmapSamples').textContent === '{len(fixtures['heatmap'])}'")
                 assert page.locator("#heatmapUnique").inner_text() == str(len({row["ssid"] for row in fixtures["heatmap"]}))
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-            bottom = page.locator('.shell').evaluate('el => el.getBoundingClientRect().bottom')
-            height = math.ceil(bottom + 24)
+            height = fitted_height(page, MAX_SHOT_HEIGHT)
             page.set_viewport_size({"width": 780, "height": height})
             page.screenshot(path=str(MEDIA / filename), animations="disabled")
             records.append({"file": filename, "viewport": [780, height], "pixels": [1560, height * 2], "tab": name})
@@ -149,7 +173,7 @@ def main():
         page.evaluate("text => document.getElementById('screenshot-notice').textContent = text",
                       notice_for("wifi"))
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-        phone_height = max(844, math.ceil(page.locator(".shell").evaluate("el => el.getBoundingClientRect().bottom") + 24))
+        phone_height = fitted_height(page, MAX_PHONE_HEIGHT)
         page.set_viewport_size({"width": 390, "height": phone_height})
         page.screenshot(path=str(MEDIA / "phone.png"), animations="disabled")
         records.append({"file": "phone.png", "viewport": [390, phone_height], "pixels": [780, phone_height * 2], "tab": "wifi"})

@@ -13,7 +13,7 @@ The current images in `images/` were rendered from `live-fixtures.json`, so the 
 
 - Each screenshot is annotated **per tab**, outside the application shell: `LIVE CAPTURE / REAL RADIO DATA FROM THE BOARD` with the capture timestamp, or `SCREENSHOT DEMO / SYNTHETIC RADIO DATA`. A real table and a mock table never sit under the same caption.
 - The cover combines the phone screenshot and a labeled crop of the channel screenshot. It is not a hardware photograph.
-- Viewport height is fitted to the complete UI; screenshots are normal browser captures, not stitched pages.
+- Screenshots are normal browser captures, never stitched pages. Viewport height fits the whole shell when it fits in 900 CSS px; a longer table (a real capture puts 39 networks in one) is cut at the last row boundary above that cap, so the image stays roughly portrait instead of becoming a 3,700 px ribbon. The header stat still shows the true total, so a truncated list never implies a smaller count.
 - `showcase/capture-manifest.json` records which fixture file was used, a `data_is_real` flag per section, the capture timestamp, source and fixture hashes, browser version, and the dimensions, sizes and hashes of the generated images.
 - **Rendering the real UI is not hardware acceptance testing.** The browser harness drives the DOM against a fixture server; it does not exercise the ESP32's C++ handlers. The one exception is `/heatmap.csv`, which `capture_live.py --tags` fetches from the firmware itself.
 
