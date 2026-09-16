@@ -1,22 +1,29 @@
 {
-  "provenance": "Actual src/ui_page.h rendered by Chromium with synthetic API fixtures and a visible demo annotation. Not hardware verification.",
+  "provenance": "Actual src/ui_page.h rendered by Chromium against live-fixtures.json, with a per-tab annotation naming the data source. Rendering the real UI is not hardware verification; the rows are real only where real[] says so.",
+  "fixtures_file": "live-fixtures.json",
+  "data_is_real": {
+    "wifi": true,
+    "ble": true,
+    "heatmap": false
+  },
+  "captured_utc": "2026-09-16T04:17:09+00:00",
   "source_sha256": "f16f3d11d03e627b9206a4eddb0f435ff14a24850e3b216152df9f092b9e4d7a",
-  "fixtures_sha256": "11ba7a9098f048eefd655dcd2c371776be2c456b06e68167414b69ef385bad07",
+  "fixtures_sha256": "58efbbb0d6cdbd23a8dfe02244e4aaaa88b65c51cd5317c2042887dfece63fd9",
   "browser_version": "148.0.7778.96",
   "assets": [
     {
       "file": "networks.png",
       "viewport": [
         780,
-        861
+        1843
       ],
       "pixels": [
         1560,
-        1722
+        3686
       ],
       "tab": "wifi",
-      "sha256": "5903aea227350f2b12d1dc70a0719513ab6d30d9f3cce80c740d54dd21225595",
-      "bytes": 154568
+      "sha256": "a9290775a8ab981c2bfdcf46134d41eed9702798132a851796f76d2ec0956e83",
+      "bytes": 329295
     },
     {
       "file": "channels.png",
@@ -29,22 +36,22 @@
         1164
       ],
       "tab": "channels",
-      "sha256": "d98e451ccd6ffe6ce1ef098670f4c73bbf02fc8c1b75bb7307ed7a7c2f1d64f8",
-      "bytes": 88965
+      "sha256": "7f4fcbd59e4ddcdc33e6020bbcace088ff82a62dfd8149c793b8e850cc4cffba",
+      "bytes": 93649
     },
     {
       "file": "bluetooth.png",
       "viewport": [
         780,
-        724
+        1812
       ],
       "pixels": [
         1560,
-        1448
+        3624
       ],
       "tab": "ble",
-      "sha256": "328eb6055a52f060f9ca9c2d0b6de862aba0769e25031c9f0894ef935acd350a",
-      "bytes": 159545
+      "sha256": "1dda4164308d68243499b988de4f7b5e1819b0bffb642c706759467a00e2a9c4",
+      "bytes": 393325
     },
     {
       "file": "heatmap.png",
@@ -64,15 +71,15 @@
       "file": "phone.png",
       "viewport": [
         390,
-        861
+        1857
       ],
       "pixels": [
         780,
-        1722
+        3714
       ],
       "tab": "wifi",
-      "sha256": "344c517c89fe01019afb22fce16cd5ebc008ab9fd8615f7909caeea027ed117d",
-      "bytes": 143058
+      "sha256": "b858b7ff3b1122b61b612ee41f268ae01a88366c35f7439086ea0cd74291d778",
+      "bytes": 306688
     },
     {
       "file": "cover.png",
@@ -85,8 +92,8 @@
         900
       ],
       "tab": "composition",
-      "sha256": "a98b6aeaf45c75cd978e86cadf275fea35e023e3adaf192e05b6fe2bd7d6ddf9",
-      "bytes": 165067
+      "sha256": "62ab57b8fa4824f934546a9eeb374c13d93b516c5354d7b85f0d3037bdeaa550",
+      "bytes": 171115
     }
   ],
   "checks": [

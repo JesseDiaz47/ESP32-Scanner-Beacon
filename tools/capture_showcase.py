@@ -1,11 +1,18 @@
-"""Capture the real embedded UI with explicitly synthetic API fixtures.
+"""Capture the real embedded UI against a chosen fixture set.
 
-No board, nearby network, secret header, or external service is read.
 The browser harness verifies UI presentation only, not ESP32 handler behavior.
-Run: python3 tools/capture_showcase.py
+
+  python3 tools/capture_showcase.py                               # synthetic
+  python3 tools/capture_showcase.py --fixtures live-fixtures.json # real capture
+
+With the default fixtures no board, nearby network, secret header, or external
+service is read. With live-fixtures.json the rows come from tools/capture_live.py,
+which did read a real board; the per-section *_real flags in that file drive the
+on-image annotation so a screenshot always states what produced its data.
 """
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import io
@@ -25,11 +32,21 @@ SHOWCASE = ROOT / "docs/showcase"
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--fixtures", default="fixtures.json",
+                        help="Fixture file in docs/showcase. Use live-fixtures.json "
+                             "for a real board capture.")
+    args = parser.parse_args()
+    fixtures_path = SHOWCASE / args.fixtures
+
     source = (ROOT / "src/ui_page.h").read_text()
     match = re.search(r'R"rawliteral\((.*?)\)rawliteral";', source, re.S)
     assert match is not None, "Cannot find the firmware UI literal"
     html = match.group(1)
-    fixtures = json.loads((SHOWCASE / "fixtures.json").read_text())
+    fixtures = json.loads(fixtures_path.read_text())
+    # Absent flags mean the old all-synthetic fixture file.
+    real = {section: bool(fixtures.get(f"{section}_real"))
+            for section in ("wifi", "ble", "heatmap")}
     MEDIA.mkdir(parents=True, exist_ok=True)
     records = []
     errors = []
@@ -80,29 +97,44 @@ def main():
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.on("console", lambda message: errors.append(message.text) if message.type == "error" else None)
         page.goto("http://scanner.test/")
-        page.wait_for_function("document.getElementById('count').textContent === '12'")
+        page.wait_for_function(
+            f"document.getElementById('count').textContent === '{len(fixtures['wifi'])}'")
         assert page.locator("#strongest").inner_text() == str(max(row["rssi"] for row in fixtures["wifi"]))
         assert page.locator("#busyChannel").inner_text() == str(Counter(row["channel"] for row in fixtures["wifi"]).most_common(1)[0][0])
         assert page.locator("#rows tr").count() == len(fixtures["wifi"])
         # Visible annotation is outside .shell. Product layout/data are untouched.
+        # The text is per-tab: a real Wi-Fi table and a mock heatmap must not
+        # sit under the same caption.
+        captured = fixtures.get("captured_utc", "")
+        def notice_for(tab):
+            section = {"wifi": "wifi", "channels": "wifi",
+                       "ble": "ble", "heatmap": "heatmap"}[tab]
+            if real[section]:
+                when = f"  /  {captured}" if captured else ""
+                return f"LIVE CAPTURE  /  REAL RADIO DATA FROM THE BOARD{when}"
+            return "SCREENSHOT DEMO  /  SYNTHETIC RADIO DATA"
+
         page.evaluate("""() => {
           const notice = document.createElement('div');
           notice.id = 'screenshot-notice';
-          notice.textContent = 'SCREENSHOT DEMO  /  SYNTHETIC RADIO DATA';
           notice.style.cssText = 'max-width:760px;margin:0 auto 14px;padding:9px 10px;border:1px solid #29444f;border-radius:7px;color:#8faeb9;background:#0d1c24;font:10px/1.4 ui-monospace,monospace;letter-spacing:.07em;text-align:center';
           document.body.prepend(notice);
         }""")
 
         for name, filename in (("wifi", "networks.png"), ("channels", "channels.png"), ("ble", "bluetooth.png"), ("heatmap", "heatmap.png")):
             page.locator(f'[data-tab="{name}"]').click()
+            page.evaluate("text => document.getElementById('screenshot-notice').textContent = text",
+                          notice_for(name))
             if name == "ble":
-                page.wait_for_function("document.querySelectorAll('#bleRows tr').length === 6")
+                page.wait_for_function(
+                    f"document.querySelectorAll('#bleRows tr').length === {len(fixtures['ble'])}")
                 page.locator("#bleScanButton").click()
                 page.wait_for_function("document.getElementById('radioState').textContent === 'BLE scan'")
                 page.wait_for_function("!document.getElementById('bleScanButton').disabled")
                 assert ("POST", "/ble/scan") in requests
             if name == "heatmap":
-                page.wait_for_function("document.getElementById('heatmapSamples').textContent === '12'")
+                page.wait_for_function(
+                    f"document.getElementById('heatmapSamples').textContent === '{len(fixtures['heatmap'])}'")
                 assert page.locator("#heatmapUnique").inner_text() == str(len({row["ssid"] for row in fixtures["heatmap"]}))
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             bottom = page.locator('.shell').evaluate('el => el.getBoundingClientRect().bottom')
@@ -114,6 +146,8 @@ def main():
         # A phone view proves this is the same responsive app, not a desktop mock.
         page.set_viewport_size({"width": 390, "height": 844})
         page.locator('[data-tab="wifi"]').click()
+        page.evaluate("text => document.getElementById('screenshot-notice').textContent = text",
+                      notice_for("wifi"))
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         phone_height = max(844, math.ceil(page.locator(".shell").evaluate("el => el.getBoundingClientRect().bottom") + 24))
         page.set_viewport_size({"width": 390, "height": phone_height})
@@ -125,17 +159,18 @@ def main():
         page.locator("#heatmapTag").fill("Bench")
         page.locator("#heatmapSnapshot").click()
         page.wait_for_function("document.getElementById('heatmapLatest').textContent === 'Bench'")
-        assert len(state["heatmap"]) == 18
+        tagged_rows = len(fixtures["heatmap"]) + 6
+        assert len(state["heatmap"]) == tagged_rows
         with page.expect_download() as download_info:
             page.locator("#heatmapExport").click()
         download = download_info.value
         downloaded = download.path()
         assert downloaded is not None
         rows = list(csv.reader(Path(downloaded).read_text().splitlines()))
-        assert len(rows) == 19 and all(len(row) == 7 for row in rows)
+        assert len(rows) == tagged_rows + 1 and all(len(row) == 7 for row in rows)
         page.once("dialog", lambda dialog: dialog.dismiss())
         page.locator("#heatmapClear").click()
-        assert len(state["heatmap"]) == 18
+        assert len(state["heatmap"]) == tagged_rows
         page.once("dialog", lambda dialog: dialog.accept())
         page.locator("#heatmapClear").click()
         page.wait_for_function("document.getElementById('heatmapSamples').textContent === '0'")
@@ -160,9 +195,15 @@ def main():
         record["sha256"] = hashlib.sha256(asset.read_bytes()).hexdigest()
         record["bytes"] = asset.stat().st_size
     manifest = {
-        "provenance": "Actual src/ui_page.h rendered by Chromium with synthetic API fixtures and a visible demo annotation. Not hardware verification.",
+        "provenance": "Actual src/ui_page.h rendered by Chromium against "
+                      f"{args.fixtures}, with a per-tab annotation naming the data "
+                      "source. Rendering the real UI is not hardware verification; "
+                      "the rows are real only where real[] says so.",
+        "fixtures_file": args.fixtures,
+        "data_is_real": real,
+        "captured_utc": fixtures.get("captured_utc"),
         "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
-        "fixtures_sha256": hashlib.sha256((SHOWCASE / "fixtures.json").read_bytes()).hexdigest(),
+        "fixtures_sha256": hashlib.sha256(fixtures_path.read_bytes()).hexdigest(),
         "browser_version": browser_version,
         "assets": records,
         "checks": ["tabs", "network sorting and counts", "BLE button and scan state", "tag and log UI", "CSV download UI with fixture output", "clear cancel and confirm", "no browser errors", "no screenshot overflow"],

@@ -2,7 +2,7 @@
 
 **A local Wi-Fi survey, BLE discovery tool, and iBeacon — one ESP32, one browser.**
 
-![ESP32 Scanner Beacon: actual phone UI and channel view, shown with synthetic demo data](docs/images/cover.png)
+![ESP32 Scanner Beacon: actual phone UI and channel view, showing a live capture of 39 real networks](docs/images/cover.png)
 
 Connect your phone to `jesse-scanner`, open `http://192.168.4.1`, and inspect nearby radio activity without a cloud account or a companion app. The board hosts the interface; your phone is the display.
 
@@ -11,36 +11,71 @@ Connect your phone to `jesse-scanner`, open `http://192.168.4.1`, and inspect ne
 
 ## See it in action
 
-These are **screenshots of the real embedded web interface**, rendered in Chromium with synthetic API fixtures. Network names, device addresses, signal levels, and location tags are demonstration data — not observations from a real survey. The screenshots demonstrate the interface, not end-to-end hardware validation.
+These are **screenshots of the real embedded web interface**, rendered in Chromium against data the board actually recorded.
+
+The **Networks**, **Channels** and **Bluetooth** tabs are a live capture taken on 2026-09-16 from an ESP32-WROOM-32 running this firmware: 39 real networks over six sweeps and 28 real BLE advertisers, with real SSIDs, real addresses, and real RSSI. The raw rows are committed under [`docs/data/`](docs/data). The **walk-around log** is still demonstration data — no walk has been performed yet — and every screenshot states on the image which of the two it is.
+
+Rendering the real UI is still not the same as hardware acceptance testing; see the [release checklist](docs/RELEASE_CHECKLIST.md).
 
 <table>
 <tr>
 <td width="50%" valign="top">
 <h3>01 · Nearby networks</h3>
-<p>Sort nearby networks by signal strength. See the SSID, channel, encryption indicator, and RSSI in one view.</p>
-<a href="docs/images/networks.png"><img src="docs/images/networks.png" alt="Networks tab showing synthetic SSIDs sorted strongest first" width="100%"></a>
+<p>Sort nearby networks by signal strength. See the SSID, channel, encryption indicator, and RSSI in one view. Shown: 39 real networks, strongest <b>&minus;21 dBm</b>, weakest <b>&minus;96 dBm</b>, 4 hidden.</p>
+<a href="docs/images/networks.png"><img src="docs/images/networks.png" alt="Networks tab showing 39 real SSIDs from a live capture, sorted strongest first" width="100%"></a>
 </td>
 <td width="50%" valign="top">
 <h3>02 · Channel analyzer</h3>
-<p>See where observed networks cluster. Bar height and color represent network count, not measured airtime or interference.</p>
-<a href="docs/images/channels.png"><img src="docs/images/channels.png" alt="Channel analyzer showing synthetic network counts on 2.4 GHz channels" width="100%"></a>
+<p>See where observed networks cluster. Bar height and color represent network count, not measured airtime or interference. Shown: <b>11 of 39</b> networks stacked on channel 6.</p>
+<a href="docs/images/channels.png"><img src="docs/images/channels.png" alt="Channel analyzer showing real network counts across 2.4 GHz channels, with 11 networks on channel 6" width="100%"></a>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
 <h3>03 · Bluetooth discovery</h3>
-<p>Request a five-second passive BLE scan. View advertised names, addresses, RSSI, and manufacturer IDs. The iBeacon pauses during discovery.</p>
-<a href="docs/images/bluetooth.png"><img src="docs/images/bluetooth.png" alt="Bluetooth tab showing six fictional BLE advertisers with signal levels and manufacturer IDs" width="100%"></a>
+<p>Request a five-second passive BLE scan. View advertised names, addresses, RSSI, and manufacturer IDs. The iBeacon pauses during discovery. Shown: 28 real advertisers, only <b>4 named</b> — most modern phones advertise a rotating address and nothing else.</p>
+<a href="docs/images/bluetooth.png"><img src="docs/images/bluetooth.png" alt="Bluetooth tab showing 28 real BLE advertisers with addresses, signal levels and manufacturer IDs" width="100%"></a>
 </td>
 <td width="50%" valign="top">
 <h3>04 · Walk-around signal log</h3>
-<p>Tag a spot and collect up to six network readings per snapshot. Inspect the log and use the CSV export control. Experimental; see the release checklist.</p>
+<p>Tag a spot and collect up to six network readings per snapshot. Inspect the log and use the CSV export control. <b>Demonstration data</b> — this is the one tab not yet backed by a real walk. Experimental; see the release checklist.</p>
 <a href="docs/images/heatmap.png"><img src="docs/images/heatmap.png" alt="Heatmap tab showing synthetic Studio and Porch signal samples, tagging controls, and CSV download" width="100%"></a>
 </td>
 </tr>
 </table>
 
 [Full phone screenshot](docs/images/phone.png) · [Screenshot provenance and reproduction](docs/SHOWCASE.md)
+
+## What one capture actually found
+
+Six sweeps and one BLE scan from a single spot, written straight to [`docs/data/`](docs/data) by `tools/capture_live.py`. Numbers below are from that capture, not estimates.
+
+| | |
+| --- | --- |
+| Sweeps | 6, about 11 s apart — **164 observations** |
+| Per-sweep counts | 28, 30, 26, 27, 30, 23 — the radio does **not** see the same set twice |
+| Unique networks | **39** |
+| Hidden SSIDs | 4 |
+| Open networks | 0 — every AP in range was encrypted |
+| RSSI range | &minus;21 dBm to &minus;96 dBm |
+| Busiest channel | **6**, carrying 11 of 39 networks |
+| Channel spread | 1:7 · 2:4 · 3:1 · 4:1 · 5:4 · 6:11 · 8:1 · 9:1 · 10:4 · 11:5 |
+| BLE advertisers | **28** in one 5-second passive scan |
+| BLE with a name | 4 of 28 |
+| Most common BLE vendor | `0x004C` (Apple) on 19 of 28 — rotating addresses, no names |
+
+Two things are worth pulling out, because they are the reason a survey tool has to sweep repeatedly rather than sample once:
+
+- **A single sweep undercounts.** The best sweep saw 30 networks and the worst 23, from the same spot, seconds apart. Any tool that scans once and reports a number is reporting noise.
+- **The 2.4 GHz band here is stacked on channel 6.** Eleven networks share it while channels 3, 4, 8 and 9 carry one apiece. That is the kind of thing you can only act on once you can see it.
+
+```sh
+# Reproduce against your own board, then re-render the screenshots.
+python3 tools/capture_live.py --sweeps 6
+python3 tools/capture_showcase.py --fixtures live-fixtures.json
+```
+
+`capture_live.py` also pulls `/heatmap.csv` straight from the firmware when you pass `--tags`, which exercises the real C++ exporter instead of a Python stand-in.
 
 ## What the board does
 
@@ -123,9 +158,10 @@ The default OTA target is `192.168.4.1`. For an explicitly configured station co
 - **Signal readings, not distance.** RSSI varies with antennas, orientation, people, and walls. It is not a calibrated range measurement.
 - **A tagged log, not a floor-plan heatmap.** There is no GPS, map interpolation, or coverage overlay.
 - **Network count, not channel utilization.** The channel view cannot measure throughput, airtime, noise, or non-Wi-Fi interference.
+- **One spot is not a site survey.** The committed capture is six sweeps from a single location. It shows drift and congestion honestly; it does not map a building.
 - **Volatile storage.** Download useful readings before rebooting. CSV correctness and BSSID capture require the fixes listed in the [release checklist](docs/RELEASE_CHECKLIST.md).
 - **An open local interface.** Anyone who can reach the HTTP server can read results, trigger scans, and clear the log. Do not expose it to an untrusted LAN or the internet. “Local” does not mean authenticated.
-- **Use responsibly.** Survey only where you have permission, follow local radio/privacy rules, and avoid publishing other people's SSIDs, BLE addresses, or location history.
+- **Use responsibly.** Survey only where you have permission and follow local radio/privacy rules. This repository deliberately publishes one real capture, unredacted, because a survey tool documented with invented numbers is not evidence of anything. That is a considered choice about one snapshot from one spot: it contains no location tags and no traffic, and the BLE addresses in it are overwhelmingly the rotating, randomised kind that identify nothing. Publishing a *walk* — repeated readings tied to named places — is a different decision, and this repo has not made it.
 
 ## Development and checks
 
@@ -143,7 +179,7 @@ c++ -std=c++11 -Wall -Wextra -Werror -Isrc \
 pio run -e esp32dev
 ```
 
-For real-browser presentation checks and screenshot regeneration, follow [docs/SHOWCASE.md](docs/SHOWCASE.md). The older `tests/test_heatmap_handlers.cpp` copies handler logic and prints a success message without validating the complete CSV; it is **not** an acceptance test for the firmware export.
+For real-browser presentation checks and screenshot regeneration, follow [docs/SHOWCASE.md](docs/SHOWCASE.md). To capture from your own board, see the commands above. The older `tests/test_heatmap_handlers.cpp` copies handler logic and prints a success message without validating the complete CSV; it is **not** an acceptance test for the firmware export.
 
 ```text
 src/main.cpp                Radio setup, surveys, HTTP handlers, OTA
@@ -153,7 +189,9 @@ include/secrets.example.h    Safe configuration template
 platformio.ini              Pinned toolchain and flash partitions
 tests/                      Source contracts, radio tests, browser checks
 docs/images/                Feature screenshots and cover artwork
-tools/capture_showcase.py    Reproducible synthetic-data screenshot harness
+docs/data/                  Real capture output: CSVs + provenance manifest
+tools/capture_live.py        Pulls a real survey off a running board
+tools/capture_showcase.py    Renders the embedded UI from a chosen fixture set
 ```
 
 ## Release status and license

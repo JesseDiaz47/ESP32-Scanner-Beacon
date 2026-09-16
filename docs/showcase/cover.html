@@ -19,7 +19,7 @@ h1 span{color:#55d9ff}
 .feature{font-size:17px;font-weight:600}.feature b{color:#55d9ff;font:12px ui-monospace,monospace;margin-right:9px}.feature small{display:block;font-size:13px;line-height:1.6;color:#8290a3;font-weight:400;padding-left:29px;margin-top:5px}
 .evidence{position:relative;height:606px}
 .phone{position:absolute;right:4px;top:-18px;width:308px;padding:9px;background:#182331;border:1px solid #344152;border-radius:24px;box-shadow:0 24px 60px #0007}
-.phone img{display:block;width:100%;border-radius:16px}
+.phone img{display:block;width:100%;height:635px;object-fit:cover;object-position:top;border-radius:16px}
 .channel{position:absolute;left:-8px;top:277px;width:438px;background:#111821;border:1px solid #344152;border-radius:16px;box-shadow:0 20px 50px #0008;overflow:hidden}
 .channel .label{display:flex;justify-content:space-between;padding:16px 19px;border-bottom:1px solid #253141;font-size:13px;font-weight:650}
 .channel .label span{color:#55d9ff;font:11px ui-monospace,monospace}
@@ -41,10 +41,10 @@ h1 span{color:#55d9ff}
 <div class="feature"><b>03</b>BLE discovery<small>On-demand scan + iBeacon</small></div>
 <div class="feature"><b>04</b>Signal log<small>Named spots · CSV export*</small></div>
 </div></section>
-<section class="evidence" aria-label="Real UI screenshots with synthetic data">
-<div class="phone"><img src="../images/phone.png" alt="Phone view of actual Networks tab with synthetic data"></div>
-<div class="channel"><div class="label">THE CHANNEL VIEW<span>ACTUAL UI / DEMO DATA</span></div><div class="crop"><img src="../images/channels.png" alt="Detail crop of the actual channel-count chart"></div></div>
-<div class="evidence-note">Actual embedded web UI.<br>Synthetic data. No private networks shown.<br>* Export hardening tracked before release.</div>
+<section class="evidence" aria-label="Real UI screenshots showing a live board capture">
+<div class="phone"><img src="../images/phone.png" alt="Phone view of the actual Networks tab showing a live capture of 39 real networks"></div>
+<div class="channel"><div class="label">THE CHANNEL VIEW<span>ACTUAL UI / LIVE DATA</span></div><div class="crop"><img src="../images/channels.png" alt="Detail crop of the actual channel-count chart"></div></div>
+<div class="evidence-note">Actual embedded web UI.<br>Live capture: 39 real networks, 28 real BLE devices.<br>* Export hardening tracked before release.</div>
 </section>
 </div>
 <footer class="footer"><strong class="tag"><i class="dot"></i>Hosted on the ESP32. No cloud required.</strong><span>Jesse Diaz · esp32-scanner-beacon</span></footer>
