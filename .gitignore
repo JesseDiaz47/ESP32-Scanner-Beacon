@@ -9,3 +9,6 @@
 include/secrets.h
 
 .test-bin/
+.venv/
+__pycache__/
+*.pyc

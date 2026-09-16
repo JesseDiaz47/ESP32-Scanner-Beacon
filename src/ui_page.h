@@ -109,7 +109,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   .footnote { margin: 11px 2px 0; color: #667489; font-size: 10px; text-align: center; }
   .tag-input {
     flex: 1 1 auto; min-width: 0; padding: 9px 11px; border: 1px solid var(--line);
-    border-radius: 10px; background: #0a1018; color: var(--text); font: 600 13px/1 -apple-system, sans-serif;
+    border-radius: 10px; background: #0a1018; color: var(--text); min-height: 44px; font: 600 16px/1 -apple-system, sans-serif;
     outline: none;
   }
   .tag-input:focus { border-color: var(--cyan); box-shadow: 0 0 0 2px rgba(85,217,255,.18); }
@@ -128,7 +128,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
   <header>
     <div class="brand">
       <div class="mark">JS</div>
-      <div><h1>Jesse Scanner</h1><p class="subtitle">Passive 2.4 GHz field survey</p></div>
+      <div><h1>Jesse Scanner</h1><p class="subtitle">Local 2.4 GHz field survey</p></div>
     </div>
     <div class="status" id="radioState">Live</div>
   </header>
@@ -158,7 +158,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
   <section class="panel" id="panel-channels" role="tabpanel">
     <div class="card">
-      <div class="card-head"><div class="eyebrow">Channel analyzer</div><h2>2.4 GHz congestion</h2><div class="meta">Bar height = AP count · color = strongest signal</div></div>
+      <div class="card-head"><div class="eyebrow">Channel analyzer</div><h2>2.4 GHz congestion</h2><div class="meta">Bar height &amp; color = network count</div></div>
       <div class="channel-wrap">
         <div class="channel-chart" id="channelBars" aria-label="Wi-Fi networks observed on channels 1 through 14"></div>
         <div class="legend"><span style="color:var(--green)"><i class="dot"></i>Light</span><span style="color:var(--amber)"><i class="dot"></i>Busy</span><span style="color:var(--red)"><i class="dot"></i>Crowded</span></div>

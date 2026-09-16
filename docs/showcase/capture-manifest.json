@@ -1,0 +1,102 @@
+{
+  "provenance": "Actual src/ui_page.h rendered by Chromium with synthetic API fixtures and a visible demo annotation. Not hardware verification.",
+  "source_sha256": "f16f3d11d03e627b9206a4eddb0f435ff14a24850e3b216152df9f092b9e4d7a",
+  "fixtures_sha256": "11ba7a9098f048eefd655dcd2c371776be2c456b06e68167414b69ef385bad07",
+  "browser_version": "148.0.7778.96",
+  "assets": [
+    {
+      "file": "networks.png",
+      "viewport": [
+        780,
+        861
+      ],
+      "pixels": [
+        1560,
+        1722
+      ],
+      "tab": "wifi",
+      "sha256": "5903aea227350f2b12d1dc70a0719513ab6d30d9f3cce80c740d54dd21225595",
+      "bytes": 154568
+    },
+    {
+      "file": "channels.png",
+      "viewport": [
+        780,
+        582
+      ],
+      "pixels": [
+        1560,
+        1164
+      ],
+      "tab": "channels",
+      "sha256": "d98e451ccd6ffe6ce1ef098670f4c73bbf02fc8c1b75bb7307ed7a7c2f1d64f8",
+      "bytes": 88965
+    },
+    {
+      "file": "bluetooth.png",
+      "viewport": [
+        780,
+        724
+      ],
+      "pixels": [
+        1560,
+        1448
+      ],
+      "tab": "ble",
+      "sha256": "328eb6055a52f060f9ca9c2d0b6de862aba0769e25031c9f0894ef935acd350a",
+      "bytes": 159545
+    },
+    {
+      "file": "heatmap.png",
+      "viewport": [
+        780,
+        1002
+      ],
+      "pixels": [
+        1560,
+        2004
+      ],
+      "tab": "heatmap",
+      "sha256": "b25e98386935921c949fb469d8a2356aed8bdba0fc58b934fa3808afe595a50d",
+      "bytes": 222909
+    },
+    {
+      "file": "phone.png",
+      "viewport": [
+        390,
+        861
+      ],
+      "pixels": [
+        780,
+        1722
+      ],
+      "tab": "wifi",
+      "sha256": "344c517c89fe01019afb22fce16cd5ebc008ab9fd8615f7909caeea027ed117d",
+      "bytes": 143058
+    },
+    {
+      "file": "cover.png",
+      "viewport": [
+        1600,
+        900
+      ],
+      "pixels": [
+        1600,
+        900
+      ],
+      "tab": "composition",
+      "sha256": "a98b6aeaf45c75cd978e86cadf275fea35e023e3adaf192e05b6fe2bd7d6ddf9",
+      "bytes": 165067
+    }
+  ],
+  "checks": [
+    "tabs",
+    "network sorting and counts",
+    "BLE button and scan state",
+    "tag and log UI",
+    "CSV download UI with fixture output",
+    "clear cancel and confirm",
+    "no browser errors",
+    "no screenshot overflow"
+  ]
+}
