@@ -1,0 +1,2 @@
+# Optional documentation/browser tooling only; not firmware dependencies.
+playwright==1.60.0
