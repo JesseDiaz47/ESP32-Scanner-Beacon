@@ -1,0 +1,39 @@
+{
+  "notice": "Synthetic screenshot fixtures. These are not real network observations or hardware test results.",
+  "wifi": [
+    {"ssid": "Demo Studio", "rssi": -38, "channel": 6, "encrypted": true},
+    {"ssid": "Demo Workbench", "rssi": -46, "channel": 1, "encrypted": true},
+    {"ssid": "Demo Guest", "rssi": -53, "channel": 11, "encrypted": false},
+    {"ssid": "Demo Sensor Net", "rssi": -59, "channel": 6, "encrypted": true},
+    {"ssid": "Demo Workshop", "rssi": -63, "channel": 1, "encrypted": true},
+    {"ssid": "Demo Annex", "rssi": -67, "channel": 6, "encrypted": true},
+    {"ssid": "Demo Office", "rssi": -71, "channel": 6, "encrypted": true},
+    {"ssid": "Demo Patio", "rssi": -74, "channel": 11, "encrypted": true},
+    {"ssid": "", "rssi": -78, "channel": 1, "encrypted": true},
+    {"ssid": "Demo Print Lab", "rssi": -82, "channel": 3, "encrypted": true},
+    {"ssid": "Demo Storage", "rssi": -85, "channel": 6, "encrypted": true},
+    {"ssid": "Demo Garage", "rssi": -89, "channel": 1, "encrypted": true}
+  ],
+  "ble": [
+    {"name": "Demo beacon", "address": "02:00:00:00:00:01", "rssi": -41, "company": 76},
+    {"name": "Demo sensor", "address": "02:00:00:00:00:02", "rssi": -52, "company": 89},
+    {"name": "Demo bench node", "address": "02:00:00:00:00:03", "rssi": -60, "company": -1},
+    {"name": "Demo tag", "address": "02:00:00:00:00:04", "rssi": -67, "company": 76},
+    {"name": "Demo room sensor", "address": "02:00:00:00:00:05", "rssi": -76, "company": 89},
+    {"name": "", "address": "02:00:00:00:00:06", "rssi": -85, "company": -1}
+  ],
+  "heatmap": [
+    {"tag": "Studio", "age": 8, "ssid": "Demo Studio", "channel": 6, "rssi": -38},
+    {"tag": "Studio", "age": 8, "ssid": "Demo Workbench", "channel": 1, "rssi": -46},
+    {"tag": "Studio", "age": 8, "ssid": "Demo Guest", "channel": 11, "rssi": -53},
+    {"tag": "Studio", "age": 8, "ssid": "Demo Sensor Net", "channel": 6, "rssi": -59},
+    {"tag": "Studio", "age": 8, "ssid": "Demo Workshop", "channel": 1, "rssi": -63},
+    {"tag": "Studio", "age": 8, "ssid": "Demo Annex", "channel": 6, "rssi": -67},
+    {"tag": "Porch", "age": 74, "ssid": "Demo Guest", "channel": 11, "rssi": -45},
+    {"tag": "Porch", "age": 74, "ssid": "Demo Studio", "channel": 6, "rssi": -58},
+    {"tag": "Porch", "age": 74, "ssid": "Demo Workbench", "channel": 1, "rssi": -64},
+    {"tag": "Porch", "age": 74, "ssid": "Demo Sensor Net", "channel": 6, "rssi": -71},
+    {"tag": "Porch", "age": 74, "ssid": "Demo Workshop", "channel": 1, "rssi": -76},
+    {"tag": "Porch", "age": 74, "ssid": "Demo Annex", "channel": 6, "rssi": -81}
+  ]
+}

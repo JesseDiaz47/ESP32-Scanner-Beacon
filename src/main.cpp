@@ -1,34 +1,36 @@
 // esp32-scanner-beacon
-// One board, two roles:
-//   1. WiFi AP-mode scanner — phone connects to "jesse-scanner", sees live SSID table at 192.168.4.1
-//   2. BLE iBeacon — broadcasts Estimote's dev UUID so any BLE scanner app sees proximity dots
+// One board, four passive roles:
+//   1. WiFi AP-mode scanner — phone connects to "jesse-scanner", sees live SSIDs
+//   2. Channel analyzer — visualizes 2.4 GHz AP density from those passive scans
+//   3. BLE scanner + iBeacon — scans on demand, advertises between scans
+//   4. RSSI heatmap — tag a spot, capture the strongest APs, walk around, export
 //
 // LEDs:
 //   GPIO 2  = onboard blue LED — flashes ~120ms each time a WiFi scan completes
-//   GPIO 4  = any free GPIO — toggles at ~5Hz while the BLE beacon is alive
+//   GPIO 4  = any free GPIO — toggles while the BLE beacon is alive, solid during scan
 //
 // Power: NULLLAB 1200mAh LiPo module -> VIN. ~2-3 hours with both radios active.
 // Board: ESP32-WROOM-32 DevKit V1, 30-pin.
-//
-// Legal note: passive WiFi scanning is legal everywhere. BLE advertising is legal
-//             everywhere. DO NOT add deauth/jamming — that is illegal.
 //
 // Reflashing: USB is only needed once. After that, `pio run -e ota -t upload`
 // pushes firmware over WiFi (see platformio.ini). OTA requires two app
 // partitions, which is why this uses min_spiffs.csv and not huge_app.csv.
 //
-// Known behavior (not a bug): the ESP32 has ONE radio shared by the AP and the
-// scanner. Each scan hops all 14 channels for ~2s, during which the AP stops
-// beaconing and the phone's HTTP fetch may fail. The page catches that and keeps
-// showing the last table, so it looks like a brief pause rather than an error.
+// Radio reality: this ESP32 has one shared 2.4 GHz radio. WiFi channel sweeps,
+// BLE discovery, and BLE advertising are coordinated rather than run blindly
+// over one another. BLE discovery is passive and only starts on user request.
 
-#include <WiFi.h>
-#include <WebServer.h>
 #include <ArduinoOTA.h>
-#include <BLEDevice.h>
 #include <BLEAdvertising.h>
-#include <BLEUtils.h>
+#include <BLEDevice.h>
+#include <BLEScan.h>
 #include <BLEUUID.h>
+#include <BLEUtils.h>
+#include <WebServer.h>
+#include <WiFi.h>
+
+#include "radio_coordinator.h"
+#include "ui_page.h"
 
 // secrets.h is gitignored and holds OTA_PASSWORD (+ optional STA credentials).
 // Build still succeeds without it, but refuses to expose an unauthenticated
@@ -39,142 +41,106 @@
 
 // ─── Pin map ────────────────────────────────────────────────────────────────
 constexpr uint8_t PIN_WIFI_LED = 2;   // onboard blue LED — scan heartbeat
-constexpr uint8_t PIN_BLE_LED  = 4;   // any free GPIO — BLE heartbeat
+constexpr uint8_t PIN_BLE_LED  = 4;   // any free GPIO — BLE status
 
 // ─── WiFi AP ────────────────────────────────────────────────────────────────
-// NOTE: IPAddress is not a literal type on this core, so these cannot be
-// constexpr. File-scope const objects are fine — built before setup() runs.
+// IPAddress is not a literal type on this core, so these are file-scope const.
 constexpr char AP_SSID[] = "jesse-scanner";
-constexpr char AP_PASS[] = "";              // open network for ease of field use
+constexpr char AP_PASS[] = "";              // open network for field use
 const IPAddress AP_IP  (192, 168, 4, 1);
-const IPAddress AP_MASK(255, 255, 255, 0);  // subnet mask, NOT a second address
+const IPAddress AP_MASK(255, 255, 255, 0);
 
 WebServer server(80);
 
-// ─── Scan state ─────────────────────────────────────────────────────────────
+// ─── WiFi scan state ────────────────────────────────────────────────────────
 struct ScanEntry {
   String  ssid;
   int32_t rssi;
   uint8_t channel;
   bool    encrypted;
 };
-// Hardware run 2026-09-10 saw 31 networks in one sweep — 32 was about to clip.
-// RAM is only 17.9% used, so this is cheap headroom.
+
+// A prior hardware run saw 31 networks in one sweep; 64 leaves cheap headroom.
 constexpr size_t MAX_ENTRIES = 64;
 ScanEntry g_entries[MAX_ENTRIES];
-size_t        g_entryCount     = 0;
-bool          g_scanInProgress = false;
-unsigned long g_lastScanStart  = 0;
-unsigned long g_wifiLedOnAt    = 0;     // 0 = LED is off
-// Set while a firmware upload is in flight. A WiFi scan knocks the radio off
-// the AP's channel for ~2s, which is fatal to an upload in progress, so
-// scanning is suspended for the duration.
-volatile bool g_otaActive      = false;
-constexpr unsigned long SCAN_INTERVAL_MS = 10000;  // scan every 10s
+size_t        g_entryCount      = 0;
+bool          g_scanInProgress  = false;
+unsigned long g_lastScanStart   = 0;
+unsigned long g_wifiLedOnAt     = 0;
+volatile bool g_otaActive       = false;
+constexpr unsigned long SCAN_INTERVAL_MS = 10000;
 constexpr unsigned long LED_FLASH_MS     = 120;
 
-// ─── BLE iBeacon ────────────────────────────────────────────────────────────
-// Estimote's public development UUID — every BLE scanner app recognizes it.
+// ─── Coordinated BLE state ──────────────────────────────────────────────────
+RadioCoordinator g_radio;
+
+struct BleEntry {
+  String  name;
+  String  address;
+  int32_t rssi;
+  int32_t company;  // Bluetooth SIG company identifier; -1 when absent
+};
+
+// This classic ESP32 has no PSRAM. Keep scan results deliberately bounded.
+constexpr size_t MAX_BLE_ENTRIES = 32;
+constexpr uint32_t BLE_SCAN_SECONDS = 5;
+BleEntry g_bleEntries[MAX_BLE_ENTRIES];
+size_t g_bleEntryCount = 0;
+BLEAdvertising* g_bleAdvertising = nullptr;
+BLEScan* g_bleScan = nullptr;
+volatile bool g_bleScanCallbackPending = false;
+
+// ─── RSSI heatmap state ─────────────────────────────────────────────────────
+// A snapshot is a tagged bundle of up to 6 APs (BSSID, channel, RSSI) sampled
+// at one spot. 16 snapshots × 6 APs = 96 rows in RAM, plus the JSON encoding
+// fits comfortably on a 4 MB flash and 320 KB heap.
+struct HeatmapRow {
+  String  ssid;
+  String  bssid;
+  uint8_t channel;
+  int32_t rssi;
+};
+struct HeatmapSample {
+  String         tag;
+  unsigned long  timestamp;
+  uint8_t        rowCount;
+  HeatmapRow     rows[6];
+};
+constexpr size_t MAX_HEATMAP_SAMPLES = 16;
+constexpr size_t MAX_HEATMAP_ROWS_PER_SAMPLE = 6;
+HeatmapSample g_heatmapSamples[MAX_HEATMAP_SAMPLES];
+size_t g_heatmapCount = 0;
+volatile bool g_heatmapSnapshotPending = false;
+String g_heatmapPendingTag;
+unsigned long g_heatmapPendingAt = 0;
+unsigned long g_heatmapSnapshotAt = 0;
+constexpr unsigned long HEATMAP_SNAPSHOT_COOLDOWN_MS = 2000;
+
+
+// Estimote's public development UUID — commonly recognized by BLE scanners.
 constexpr char     IBEACON_UUID[]   = "B9407F30-F5F8-466E-AFF9-25565B57FE6D";
 constexpr uint16_t IBEACON_MAJOR    = 1;
 constexpr uint16_t IBEACON_MINOR    = 1;
-constexpr int8_t   IBEACON_TX_POWER = -59;  // calibrated RSSI at 1m
-
-// ─── HTML page (the phone UI) ───────────────────────────────────────────────
-const char INDEX_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>jesse-scanner</title>
-<style>
-  body { font: 14px/1.4 -apple-system, system-ui, sans-serif; margin: 0; padding: 12px;
-         background: #111; color: #eee; }
-  h1   { font-size: 18px; margin: 0 0 8px; color: #6cf; }
-  .meta { color: #888; font-size: 12px; margin-bottom: 12px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #222; }
-  th     { color: #888; font-weight: normal; font-size: 12px; text-transform: uppercase; }
-  td.rssi { font-family: ui-monospace, Menlo, monospace; text-align: right; width: 90px;
-            white-space: nowrap; }
-  td.enc  { text-align: center; width: 30px; }
-  .bar    { display: inline-block; width: 4px; margin-right: 1px; background: #6cf;
-            vertical-align: baseline; }
-  .empty  { color: #555; font-style: italic; padding: 24px; text-align: center; }
-  .live   { color: #6cf; }
-  .live::before { content: "\25CF"; margin-right: 4px; animation: pulse 1.5s infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-</style>
-</head><body>
-<h1>jesse-scanner</h1>
-<div class="meta">
-  <span class="live">live</span> &middot; <span id="count">0</span> networks &middot;
-  strongest first &middot; refreshes every 3s (scan every 10s)
-</div>
-<table>
-  <thead><tr><th>SSID</th><th>CH</th><th class="enc">LOCK</th><th class="rssi">RSSI</th></tr></thead>
-  <tbody id="rows"><tr><td colspan="4" class="empty">scanning&hellip;</td></tr></tbody>
-</table>
-<script>
-function emptyRow(body, msg) {
-  var tr = body.insertRow();
-  var td = tr.insertCell();
-  td.colSpan = 4;
-  td.className = 'empty';
-  td.textContent = msg;
-}
-async function tick() {
-  try {
-    var r = await fetch('/scan.json', { cache: 'no-store' });
-    var d = await r.json();
-    var list = d.entries.slice().sort(function (a, b) { return b.rssi - a.rssi; });
-    document.getElementById('count').textContent = list.length;
-    var body = document.getElementById('rows');
-    body.textContent = '';
-    if (!list.length) { emptyRow(body, 'no networks in range'); return; }
-    // Built with DOM nodes, not innerHTML: an SSID is attacker-chosen text and
-    // must never be parsed as markup.
-    list.forEach(function (e) {
-      var tr = body.insertRow();
-      var tdS = tr.insertCell();
-      if (e.ssid) {
-        tdS.textContent = e.ssid;
-      } else {
-        tdS.textContent = '(hidden)';
-        tdS.style.color = '#666';
-      }
-      tr.insertCell().textContent = e.channel;
-      var tdE = tr.insertCell();
-      tdE.className = 'enc';
-      tdE.textContent = e.encrypted ? '●' : '';
-      var tdR = tr.insertCell();
-      tdR.className = 'rssi';
-      var bars = Math.max(0, Math.min(5, Math.floor((e.rssi + 100) / 12)));
-      for (var i = 0; i < bars; i++) {
-        var s = document.createElement('span');
-        s.className = 'bar';
-        s.style.height = (i * 3 + 4) + 'px';
-        tdR.appendChild(s);
-      }
-      tdR.appendChild(document.createTextNode(' ' + e.rssi));
-    });
-  } catch (err) {
-    // A scan sweep knocks the AP off-channel for ~2s; keep the last table.
-  }
-}
-tick();
-setInterval(tick, 3000);
-</script>
-</body></html>
-)rawliteral";
+constexpr int8_t   IBEACON_TX_POWER = -59;
 
 // ─── Forward declarations ───────────────────────────────────────────────────
 void setup_wifi_ap();
-void setup_ble_beacon();
+void setup_ble();
 void setup_ota();
-void start_scan();
-void handle_scan_json();
+void start_wifi_scan();
+void begin_ble_scan();
+void complete_ble_scan();
+void on_ble_scan_complete(BLEScanResults results);
 void handle_root();
+void handle_scan_json();
+void handle_ble_scan();
+void handle_ble_json();
+void handle_heatmap_scan();
+void handle_heatmap_json();
+void handle_heatmap_csv();
+void handle_heatmap_clear();
+void schedule_heatmap_snapshot(const String& tag);
+void capture_heatmap_snapshot(const String& tag);
 
 // ─── Arduino entry points ───────────────────────────────────────────────────
 void setup() {
@@ -188,28 +154,41 @@ void setup() {
   digitalWrite(PIN_BLE_LED, LOW);
 
   setup_wifi_ap();
-  setup_ble_beacon();
+  setup_ble();
   setup_ota();
 
   server.on("/", HTTP_GET, handle_root);
   server.on("/scan.json", HTTP_GET, handle_scan_json);
+  server.on("/ble/scan", HTTP_POST, handle_ble_scan);
+  server.on("/ble.json", HTTP_GET, handle_ble_json);
+  server.on("/heatmap/scan", HTTP_POST, handle_heatmap_scan);
+  server.on("/heatmap.json", HTTP_GET, handle_heatmap_json);
+  server.on("/heatmap.csv", HTTP_GET, handle_heatmap_csv);
+  server.on("/heatmap/clear", HTTP_POST, handle_heatmap_clear);
   server.begin();
   Serial.println("[http] listening on http://192.168.4.1/");
 
-  start_scan();  // don't make the page sit on "scanning..." for a full interval
+  start_wifi_scan();
 }
 
 void loop() {
   ArduinoOTA.handle();
   server.handleClient();
 
-  // Never start a scan mid-upload — see g_otaActive.
-  if (!g_otaActive && !g_scanInProgress &&
-      (millis() - g_lastScanStart > SCAN_INTERVAL_MS)) {
-    start_scan();
+  // A BLE request waits for any WiFi sweep already in flight, then owns the
+  // radio for five seconds. No new WiFi sweep can begin while it waits.
+  if (g_radio.state() == RadioState::BleRequested && !g_scanInProgress) {
+    begin_ble_scan();
+  }
+  if (g_bleScanCallbackPending) {
+    complete_ble_scan();
   }
 
-  // Drain completed scan results when they become available.
+  if (!g_otaActive && g_radio.wifiScanAllowed() && !g_scanInProgress &&
+      (millis() - g_lastScanStart > SCAN_INTERVAL_MS)) {
+    start_wifi_scan();
+  }
+
   if (g_scanInProgress) {
     int n = WiFi.scanComplete();
     if (n >= 0) {
@@ -229,133 +208,203 @@ void loop() {
       Serial.println("[scan] failed");
       g_scanInProgress = false;
     }
-    // n == WIFI_SCAN_RUNNING (-1) -> keep waiting
   }
 
-  // End the scan flash. Without this the LED latches on after the first scan.
   if (g_wifiLedOnAt && (millis() - g_wifiLedOnAt > LED_FLASH_MS)) {
     digitalWrite(PIN_WIFI_LED, LOW);
     g_wifiLedOnAt = 0;
   }
 
-  // ── BLE heartbeat — toggle every ~100ms so the beacon is visibly alive ───
-  static unsigned long lastBeat  = 0;
-  static uint8_t       beatState = 0;
-  if (millis() - lastBeat > 100) {
-    lastBeat = millis();
-    digitalWrite(PIN_BLE_LED, beatState);
-    beatState = !beatState;
+  // A heatmap snapshot wants the freshest scan. If a sweep is mid-flight,
+  // capture the next result when it lands. Otherwise kick a fresh one now.
+  if (g_heatmapSnapshotPending && !g_scanInProgress) {
+    if (g_entryCount > 0) {
+      capture_heatmap_snapshot(g_heatmapPendingTag);
+    } else {
+      start_wifi_scan();
+    }
   }
 
-  yield();  // let the WiFi/BLE background tasks run
+  // Solid means discovery is running. A heartbeat means the iBeacon is live.
+  static unsigned long lastBeat = 0;
+  static bool beatState = false;
+  if (g_radio.state() == RadioState::BleScanning) {
+    digitalWrite(PIN_BLE_LED, HIGH);
+  } else if (g_radio.advertisingShouldRun() && millis() - lastBeat > 100) {
+    lastBeat = millis();
+    beatState = !beatState;
+    digitalWrite(PIN_BLE_LED, beatState);
+  } else if (!g_radio.advertisingShouldRun()) {
+    digitalWrite(PIN_BLE_LED, LOW);
+  }
+
+  yield();
 }
 
 // ─── WiFi AP setup ──────────────────────────────────────────────────────────
 void setup_wifi_ap() {
-  // AP for the phone + STA so scanNetworks() has an interface to scan with.
   WiFi.mode(WIFI_AP_STA);
-  // Configure before starting, so the AP comes up once on the right subnet.
   if (!WiFi.softAPConfig(AP_IP, AP_IP, AP_MASK)) {
     Serial.println("[ap] softAPConfig FAILED");
   }
-  if (!WiFi.softAP(AP_SSID, AP_PASS, 1, 0, 4)) {  // channel 1, visible, 4 clients
+  if (!WiFi.softAP(AP_SSID, AP_PASS, 1, 0, 4)) {
     Serial.println("[ap] softAP FAILED");
     return;
   }
   Serial.printf("[ap] SSID=%s  IP=%s\n", AP_SSID, WiFi.softAPIP().toString().c_str());
 
 #if defined(WIFI_STA_SSID) && defined(WIFI_STA_PASS)
-  // Optional: also join a real network so OTA works without the uploading
-  // machine leaving it. Non-blocking — the AP and the beacon must come up
-  // regardless of whether this network is in range.
   WiFi.begin(WIFI_STA_SSID, WIFI_STA_PASS);
   Serial.printf("[sta] joining %s (non-blocking)\n", WIFI_STA_SSID);
 #endif
 }
 
-// ─── BLE iBeacon setup ──────────────────────────────────────────────────────
-// Parse "B9407F30-F5F8-466E-AFF9-25565B57FE6D" into 16 bytes in WRITTEN order.
-// We deliberately do NOT use BLEUUID::getNative(), which stores uuid128 in
-// reverse byte order — memcpy'ing that straight into the packet broadcasts the
-// UUID backwards, and no scanner would match the UUID above.
-static bool parse_uuid128(const char* s, uint8_t out[16]) {
-  int nib = 0;
-  for (const char* p = s; *p; ++p) {
+// ─── BLE beacon + passive scanner setup ─────────────────────────────────────
+// Parse a canonical UUID into bytes in written order. BLEUUID::getNative()
+// stores uuid128 reversed, which is wrong for an iBeacon payload memcpy.
+static bool parse_uuid128(const char* text, uint8_t out[16]) {
+  int nibble = 0;
+  for (const char* p = text; *p; ++p) {
     if (*p == '-') continue;
-    if (nib >= 32) return false;
-    uint8_t v;
-    if      (*p >= '0' && *p <= '9') v = *p - '0';
-    else if (*p >= 'a' && *p <= 'f') v = *p - 'a' + 10;
-    else if (*p >= 'A' && *p <= 'F') v = *p - 'A' + 10;
+    if (nibble >= 32) return false;
+    uint8_t value;
+    if      (*p >= '0' && *p <= '9') value = *p - '0';
+    else if (*p >= 'a' && *p <= 'f') value = *p - 'a' + 10;
+    else if (*p >= 'A' && *p <= 'F') value = *p - 'A' + 10;
     else return false;
-    if (nib % 2 == 0) out[nib / 2]  = v << 4;
-    else              out[nib / 2] |= v;
-    nib++;
+    if (nibble % 2 == 0) out[nibble / 2]  = value << 4;
+    else                 out[nibble / 2] |= value;
+    nibble++;
   }
-  return nib == 32;
+  return nibble == 32;
 }
 
-// Apple iBeacon advertisement, exactly 30 of the 31 permitted payload bytes:
-//   [02 01 06]                        flags AD structure                    3
-//   [1A FF 4C 00 02 15] [16B UUID]
-//     [2B major] [2B minor] [1B tx]   manufacturer-specific AD structure   27
-// setManufacturerData() prepends the [length][0xFF] pair itself, so we hand it
-// only the 25 bytes from the Apple company ID onward.
-void setup_ble_beacon() {
+void setup_ble() {
   uint8_t uuid[16];
   if (!parse_uuid128(IBEACON_UUID, uuid)) {
-    Serial.println("[ble] bad IBEACON_UUID — beacon not started");
+    Serial.println("[ble] bad IBEACON_UUID — BLE disabled");
     return;
   }
 
   BLEDevice::init("");
-  BLEAdvertising* adv = BLEDevice::getAdvertising();
+  g_bleAdvertising = BLEDevice::getAdvertising();
+  g_bleScan = BLEDevice::getScan();
 
-  uint8_t md[25];
+  uint8_t manufacturer[25];
   size_t k = 0;
-  md[k++] = 0x4C; md[k++] = 0x00;                 // Apple company ID, little-endian
-  md[k++] = 0x02; md[k++] = 0x15;                 // iBeacon type, 21 bytes follow
-  memcpy(&md[k], uuid, 16); k += 16;              // proximity UUID, big-endian
-  md[k++] = (IBEACON_MAJOR >> 8) & 0xFF;
-  md[k++] =  IBEACON_MAJOR       & 0xFF;
-  md[k++] = (IBEACON_MINOR >> 8) & 0xFF;
-  md[k++] =  IBEACON_MINOR       & 0xFF;
-  md[k++] = (uint8_t)IBEACON_TX_POWER;
-  // Every byte is assigned: a short-filled buffer would leak stack garbage
-  // into the packet and push it over the 31-byte cap.
-  static_assert(sizeof(md) == 25, "iBeacon manufacturer payload must be 25 bytes");
+  manufacturer[k++] = 0x4C; manufacturer[k++] = 0x00;
+  manufacturer[k++] = 0x02; manufacturer[k++] = 0x15;
+  memcpy(&manufacturer[k], uuid, 16); k += 16;
+  manufacturer[k++] = (IBEACON_MAJOR >> 8) & 0xFF;
+  manufacturer[k++] =  IBEACON_MAJOR       & 0xFF;
+  manufacturer[k++] = (IBEACON_MINOR >> 8) & 0xFF;
+  manufacturer[k++] =  IBEACON_MINOR       & 0xFF;
+  manufacturer[k++] = (uint8_t)IBEACON_TX_POWER;
+  static_assert(sizeof(manufacturer) == 25, "iBeacon manufacturer payload must be 25 bytes");
 
-  BLEAdvertisementData advData;
-  advData.setFlags(0x06);  // LE General Discoverable + BR/EDR not supported
-  advData.setManufacturerData(std::string((const char*)md, sizeof(md)));
+  BLEAdvertisementData advertisementData;
+  advertisementData.setFlags(0x06);
+  advertisementData.setManufacturerData(
+      std::string((const char*)manufacturer, sizeof(manufacturer)));
 
-  std::string payload = advData.getPayload();
+  std::string payload = advertisementData.getPayload();
   Serial.printf("[ble] adv payload %u bytes (cap 31): ", (unsigned)payload.size());
-  for (size_t i = 0; i < payload.size(); i++) Serial.printf("%02X", (uint8_t)payload[i]);
+  for (size_t i = 0; i < payload.size(); i++) {
+    Serial.printf("%02X", (uint8_t)payload[i]);
+  }
   Serial.println();
   if (payload.size() > 31) {
-    Serial.println("[ble] payload OVER 31 bytes — the controller will reject it");
+    Serial.println("[ble] payload OVER 31 bytes — BLE disabled");
+    return;
   }
 
-  adv->setAdvertisementData(advData);
-  adv->setAdvertisementType(ADV_TYPE_NONCONN_IND);  // non-connectable beacon
-  adv->setMinInterval(160);  // 100ms (units of 0.625ms)
-  adv->setMaxInterval(320);  // 200ms
-  adv->start();
+  g_bleAdvertising->setAdvertisementData(advertisementData);
+  g_bleAdvertising->setAdvertisementType(ADV_TYPE_NONCONN_IND);
+  g_bleAdvertising->setMinInterval(160);
+  g_bleAdvertising->setMaxInterval(320);
+  g_bleAdvertising->start();
+
+  // Passive discovery listens only. Short window leaves room for the WiFi AP.
+  g_bleScan->setActiveScan(false);
+  g_bleScan->setInterval(120);
+  g_bleScan->setWindow(80);
 
   Serial.printf("[ble] iBeacon started — UUID=%s  major=%u  minor=%u  tx=%d\n",
                 IBEACON_UUID, IBEACON_MAJOR, IBEACON_MINOR, IBEACON_TX_POWER);
+  Serial.printf("[ble-scan] passive discovery ready — %us on demand, max %u devices\n",
+                (unsigned)BLE_SCAN_SECONDS, (unsigned)MAX_BLE_ENTRIES);
+}
+
+void on_ble_scan_complete(BLEScanResults results) {
+  (void)results;
+  g_bleScanCallbackPending = true;
+}
+
+void begin_ble_scan() {
+  if (!g_bleScan || !g_bleAdvertising || !g_radio.beginBleScan()) {
+    g_radio.cancelBleScan();
+    Serial.println("[ble-scan] unavailable");
+    return;
+  }
+
+  g_bleAdvertising->stop();
+  digitalWrite(PIN_BLE_LED, HIGH);
+  g_bleScan->clearResults();
+  if (!g_bleScan->start(BLE_SCAN_SECONDS, on_ble_scan_complete, false)) {
+    g_radio.cancelBleScan();
+    g_bleAdvertising->start();
+    digitalWrite(PIN_BLE_LED, LOW);
+    Serial.println("[ble-scan] failed to start; iBeacon resumed");
+    return;
+  }
+  Serial.printf("[ble-scan] started — passive, %us; iBeacon paused\n",
+                (unsigned)BLE_SCAN_SECONDS);
+}
+
+void complete_ble_scan() {
+  g_bleScanCallbackPending = false;
+  if (!g_bleScan) return;
+
+  // A callback caused by OTA preemption is stale. Clear it without leaving OTA.
+  if (!g_radio.finishBleScan()) {
+    g_bleScan->clearResults();
+    return;
+  }
+
+  BLEScanResults results = g_bleScan->getResults();
+  g_bleEntryCount = (size_t)min(results.getCount(), (int)MAX_BLE_ENTRIES);
+  for (size_t i = 0; i < g_bleEntryCount; i++) {
+    BLEAdvertisedDevice device = results.getDevice(i);
+    g_bleEntries[i].name = device.haveName()
+        ? String(device.getName().c_str())
+        : String();
+    g_bleEntries[i].address = String(device.getAddress().toString().c_str());
+    g_bleEntries[i].rssi = device.haveRSSI() ? device.getRSSI() : -127;
+    g_bleEntries[i].company = -1;
+    if (device.haveManufacturerData()) {
+      std::string data = device.getManufacturerData();
+      if (data.size() >= 2) {
+        g_bleEntries[i].company =
+            (uint8_t)data[0] | ((uint16_t)(uint8_t)data[1] << 8);
+      }
+    }
+  }
+  g_bleScan->clearResults();
+  g_lastScanStart = millis();  // let the AP settle before the next WiFi sweep
+
+  if (!g_otaActive && g_bleAdvertising) {
+    g_bleAdvertising->start();
+  }
+  digitalWrite(PIN_BLE_LED, LOW);
+  Serial.printf("[ble-scan] complete — %u devices; iBeacon resumed\n",
+                (unsigned)g_bleEntryCount);
 }
 
 // ─── OTA ────────────────────────────────────────────────────────────────────
-// Upload over the board's own AP (192.168.4.1) — no infrastructure, so it works
-// in the desert as well as at the bench. If secrets.h defines WIFI_STA_SSID the
-// board also joins that network, and OTA is reachable on both addresses.
 void setup_ota() {
 #ifndef OTA_PASSWORD
   Serial.println("[ota] DISABLED — no OTA_PASSWORD in secrets.h.");
-  Serial.println("[ota] The AP is open; an unauthenticated OTA endpoint on it would let");
-  Serial.println("[ota] anyone in radio range flash this board. Copy include/secrets.example.h.");
+  Serial.println("[ota] Refusing unauthenticated updates on an open AP.");
   return;
 #else
   ArduinoOTA.setHostname("jesse-scanner");
@@ -363,27 +412,31 @@ void setup_ota() {
 
   ArduinoOTA.onStart([]() {
     g_otaActive = true;
-    // Stop the scanner: an in-flight scan would take the radio off-channel and
-    // kill the transfer. Drop any pending async result too.
+    bool bleWasScanning = g_radio.state() == RadioState::BleScanning;
+    g_radio.beginOta();
+
     if (g_scanInProgress) {
       WiFi.scanDelete();
       g_scanInProgress = false;
     }
-    // Quiet the BLE radio for the duration. Both radios competing during a
-    // ~1.5MB transfer is needless risk, and the board reboots straight after.
-    BLEDevice::getAdvertising()->stop();
+    if (bleWasScanning && g_bleScan) {
+      g_bleScan->stop();
+    }
+    if (g_bleAdvertising) {
+      g_bleAdvertising->stop();
+    }
     digitalWrite(PIN_BLE_LED, LOW);
-    Serial.println("\n[ota] upload started — scanner and beacon suspended");
+    Serial.println("\n[ota] upload started — radio surveys suspended");
   });
 
   ArduinoOTA.onProgress([](unsigned int done, unsigned int total) {
-    static int lastPct = -1;
-    int pct = total ? (int)((done * 100UL) / total) : 0;
-    if (pct != lastPct && pct % 10 == 0) {
-      lastPct = pct;
-      Serial.printf("[ota] %d%%\n", pct);
+    static int lastPercent = -1;
+    int percent = total ? (int)((done * 100UL) / total) : 0;
+    if (percent != lastPercent && percent % 10 == 0) {
+      lastPercent = percent;
+      Serial.printf("[ota] %d%%\n", percent);
     }
-    digitalWrite(PIN_WIFI_LED, (done / 16384) & 1);  // flicker while writing
+    digitalWrite(PIN_WIFI_LED, (done / 16384) & 1);
   });
 
   ArduinoOTA.onEnd([]() {
@@ -391,33 +444,111 @@ void setup_ota() {
     digitalWrite(PIN_WIFI_LED, LOW);
   });
 
-  ArduinoOTA.onError([](ota_error_t e) {
-    // Recover rather than sit dead with the scanner switched off.
+  ArduinoOTA.onError([](ota_error_t error) {
     g_otaActive = false;
-    BLEDevice::getAdvertising()->start();
-    const char* msg = "unknown";
-    switch (e) {
-      case OTA_AUTH_ERROR:    msg = "auth failed (wrong --auth password)"; break;
-      case OTA_BEGIN_ERROR:   msg = "begin failed (image too big for the partition?)"; break;
-      case OTA_CONNECT_ERROR: msg = "connect failed"; break;
-      case OTA_RECEIVE_ERROR: msg = "receive failed"; break;
-      case OTA_END_ERROR:     msg = "end failed"; break;
+    g_radio.finishOta();
+    if (g_bleAdvertising) {
+      g_bleAdvertising->start();
     }
-    Serial.printf("[ota] ERROR: %s — scanner and beacon resumed\n", msg);
+    const char* message = "unknown";
+    switch (error) {
+      case OTA_AUTH_ERROR:    message = "auth failed"; break;
+      case OTA_BEGIN_ERROR:   message = "begin failed"; break;
+      case OTA_CONNECT_ERROR: message = "connect failed"; break;
+      case OTA_RECEIVE_ERROR: message = "receive failed"; break;
+      case OTA_END_ERROR:     message = "end failed"; break;
+    }
+    Serial.printf("[ota] ERROR: %s — scanner and beacon resumed\n", message);
   });
 
   ArduinoOTA.begin();
   Serial.printf("[ota] ready, password set — %s", WiFi.softAPIP().toString().c_str());
-  if (WiFi.status() == WL_CONNECTED) Serial.printf(" and %s", WiFi.localIP().toString().c_str());
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.printf(" and %s", WiFi.localIP().toString().c_str());
+  }
   Serial.println(" (pio run -e ota -t upload)");
 #endif
 }
 
 // ─── WiFi scan ──────────────────────────────────────────────────────────────
-void start_scan() {
-  WiFi.scanNetworks(true, true);  // async so the web server keeps serving
+void start_wifi_scan() {
+  if (!g_radio.wifiScanAllowed()) return;
+  WiFi.scanNetworks(true, true);
   g_scanInProgress = true;
-  g_lastScanStart  = millis();
+  g_lastScanStart = millis();
+}
+
+// ─── Heatmap capture ────────────────────────────────────────────────────────
+// Drop the oldest sample, append the newest. 16 snapshots × 6 APs keeps the
+// heap impact under 10 KB and gives a useful walkaround record.
+static void shift_oldest_heatmap_sample() {
+  for (size_t i = 1; i < g_heatmapCount; i++) {
+    g_heatmapSamples[i - 1] = g_heatmapSamples[i];
+  }
+  if (g_heatmapCount > 0) g_heatmapCount--;
+}
+
+void capture_heatmap_snapshot(const String& tag) {
+  g_heatmapSnapshotPending = false;
+  if (g_otaActive || g_entryCount == 0) return;
+
+  if (g_heatmapCount >= MAX_HEATMAP_SAMPLES) {
+    shift_oldest_heatmap_sample();
+  }
+  HeatmapSample sample;
+  sample.tag = tag.length() ? tag : String("spot");
+  sample.timestamp = millis();
+  sample.rowCount = (uint8_t)min<size_t>(MAX_HEATMAP_ROWS_PER_SAMPLE, g_entryCount);
+
+  // Sort the strongest APs into a small array. We pull BSSID and RSSI here
+  // because they're attached to the last scan and disappear with WiFi.scanDelete.
+  struct Ranked { int32_t rssi; size_t index; };
+  Ranked ranked[MAX_ENTRIES];
+  for (size_t i = 0; i < g_entryCount; i++) {
+    ranked[i] = { g_entries[i].rssi, i };
+  }
+  for (size_t i = 0; i < g_entryCount; i++) {
+    for (size_t j = i + 1; j < g_entryCount; j++) {
+      if (ranked[j].rssi > ranked[i].rssi) {
+        Ranked swap = ranked[i];
+        ranked[i] = ranked[j];
+        ranked[j] = swap;
+      }
+    }
+  }
+  for (uint8_t i = 0; i < sample.rowCount; i++) {
+    size_t src = ranked[i].index;
+    sample.rows[i].ssid    = g_entries[src].ssid;
+    sample.rows[i].channel = g_entries[src].channel;
+    sample.rows[i].rssi    = g_entries[src].rssi;
+    sample.rows[i].bssid   = WiFi.BSSIDstr(src);
+  }
+  g_heatmapSamples[g_heatmapCount++] = sample;
+  g_heatmapSnapshotAt = millis();
+  Serial.printf("[heatmap] captured \"%s\" — %u rows; %u samples in RAM\n",
+                sample.tag.c_str(), (unsigned)sample.rowCount,
+                (unsigned)g_heatmapCount);
+}
+
+void schedule_heatmap_snapshot(const String& tag) {
+  if (g_otaActive) return;
+  // Reject presses that arrive during a BLE scan: the radio is unavailable.
+  if (g_radio.state() == RadioState::BleRequested ||
+      g_radio.state() == RadioState::BleScanning) {
+    Serial.println("[heatmap] snapshot ignored — BLE scan in progress");
+    return;
+  }
+  unsigned long now = millis();
+  if (now - g_heatmapSnapshotAt < HEATMAP_SNAPSHOT_COOLDOWN_MS) {
+    Serial.println("[heatmap] snapshot ignored — cooldown");
+    return;
+  }
+  g_heatmapPendingTag = tag;
+  g_heatmapSnapshotPending = true;
+  // If a sweep is mid-flight, wait for the next result. Otherwise trigger one.
+  if (!g_scanInProgress && g_entryCount == 0) {
+    start_wifi_scan();
+  }
 }
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────────
@@ -425,30 +556,29 @@ void handle_root() {
   server.send(200, "text/html", INDEX_HTML);
 }
 
-// SSIDs are arbitrary bytes. An unescaped quote or backslash in one name breaks
-// JSON.parse() on the phone and blanks the whole table.
-static String json_escape(const String& s) {
-  String out;
-  out.reserve(s.length() + 8);
-  for (size_t i = 0; i < s.length(); i++) {
-    char c = s[i];
+// SSIDs and BLE names are arbitrary bytes. Escape them before JSON encoding.
+static String json_escape(const String& input) {
+  String output;
+  output.reserve(input.length() + 8);
+  for (size_t i = 0; i < input.length(); i++) {
+    char c = input[i];
     switch (c) {
-      case '"':  out += "\\\""; break;
-      case '\\': out += "\\\\"; break;
-      case '\n': out += "\\n";  break;
-      case '\r': out += "\\r";  break;
-      case '\t': out += "\\t";  break;
+      case '"':  output += "\\\""; break;
+      case '\\': output += "\\\\"; break;
+      case '\n': output += "\\n";  break;
+      case '\r': output += "\\r";  break;
+      case '\t': output += "\\t";  break;
       default:
         if ((uint8_t)c < 0x20) {
-          char buf[7];
-          snprintf(buf, sizeof(buf), "\\u%04x", (unsigned)(uint8_t)c);
-          out += buf;
+          char escaped[7];
+          snprintf(escaped, sizeof(escaped), "\\u%04x", (unsigned)(uint8_t)c);
+          output += escaped;
         } else {
-          out += c;  // UTF-8 multibyte passes through unchanged
+          output += c;
         }
     }
   }
-  return out;
+  return output;
 }
 
 void handle_scan_json() {
@@ -456,11 +586,125 @@ void handle_scan_json() {
   for (size_t i = 0; i < g_entryCount; i++) {
     if (i) body += ",";
     body += "{\"ssid\":\"" + json_escape(g_entries[i].ssid) + "\",";
-    body += "\"rssi\":"    + String(g_entries[i].rssi) + ",";
-    body += "\"channel\":" + String(g_entries[i].channel) + ",";
+    body += "\"rssi\":"      + String(g_entries[i].rssi) + ",";
+    body += "\"channel\":"   + String(g_entries[i].channel) + ",";
     body += "\"encrypted\":" + String(g_entries[i].encrypted ? "true" : "false") + "}";
   }
   body += "]}";
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", body);
+}
+
+void handle_ble_scan() {
+  server.sendHeader("Cache-Control", "no-store");
+  if (!g_bleScan || !g_bleAdvertising) {
+    server.send(503, "application/json", "{\"accepted\":false,\"error\":\"BLE unavailable\"}");
+    return;
+  }
+  if (g_otaActive) {
+    server.send(409, "application/json", "{\"accepted\":false,\"error\":\"OTA active\"}");
+    return;
+  }
+  if (g_radio.requestBleScan()) {
+    server.send(202, "application/json", "{\"accepted\":true,\"scanning\":true}");
+  } else {
+    server.send(202, "application/json", "{\"accepted\":false,\"scanning\":true}");
+  }
+}
+
+void handle_ble_json() {
+  bool scanning = g_radio.state() == RadioState::BleRequested ||
+                  g_radio.state() == RadioState::BleScanning;
+  String body = "{\"scanning\":" + String(scanning ? "true" : "false") + ",\"entries\":[";
+  for (size_t i = 0; i < g_bleEntryCount; i++) {
+    if (i) body += ",";
+    body += "{\"name\":\"" + json_escape(g_bleEntries[i].name) + "\",";
+    body += "\"address\":\"" + json_escape(g_bleEntries[i].address) + "\",";
+    body += "\"rssi\":" + String(g_bleEntries[i].rssi) + ",";
+    body += "\"company\":" + String(g_bleEntries[i].company) + "}";
+  }
+  body += "]}";
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", body);
+}
+
+// ─── Heatmap HTTP ───────────────────────────────────────────────────────────
+void handle_heatmap_scan() {
+  server.sendHeader("Cache-Control", "no-store");
+  String tag = server.arg("tag");
+  tag.trim();
+  if (tag.length() > 24) tag = tag.substring(0, 24);
+  if (g_otaActive) {
+    server.send(409, "application/json", "{\"accepted\":false,\"error\":\"OTA active\"}");
+    return;
+  }
+  schedule_heatmap_snapshot(tag);
+  server.send(202, "application/json", "{\"accepted\":true,\"tag\":\"" +
+                                json_escape(tag) + "\"}");
+}
+
+void handle_heatmap_json() {
+  // Newest sample first. Newest entries appear at the top of the table.
+  String body = "{\"entries\":[";
+  bool firstRow = true;
+  unsigned long now = millis();
+  for (size_t sampleIdx = g_heatmapCount; sampleIdx > 0; sampleIdx--) {
+    const HeatmapSample& sample = g_heatmapSamples[sampleIdx - 1];
+    unsigned long ageSeconds = (now - sample.timestamp) / 1000UL;
+    for (uint8_t rowIdx = 0; rowIdx < sample.rowCount; rowIdx++) {
+      if (!firstRow) body += ",";
+      firstRow = false;
+      const HeatmapRow& row = sample.rows[rowIdx];
+      body += "{\"tag\":\"" + json_escape(sample.tag) + "\",";
+      body += "\"age\":" + String(ageSeconds) + ",";
+      body += "\"ssid\":\"" + json_escape(row.ssid) + "\",";
+      body += "\"channel\":" + String(row.channel) + ",";
+      body += "\"rssi\":" + String(row.rssi) + "}";
+    }
+  }
+  body += "]}";
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", body);
+}
+
+void handle_heatmap_csv() {
+  String csv = "tag,epoch_ms,age_s,ssid,bssid,channel,rssi\n";
+  unsigned long now = millis();
+  for (size_t sampleIdx = 0; sampleIdx < g_heatmapCount; sampleIdx++) {
+    const HeatmapSample& sample = g_heatmapSamples[sampleIdx];
+    unsigned long ageSeconds = (now - sample.timestamp) / 1000UL;
+    // millis() overflows after ~49 days. The CSV stays readable for ad-hoc
+    // analysis; a long-running survey should subtract boot-time anchor.
+    for (uint8_t rowIdx = 0; rowIdx < sample.rowCount; rowIdx++) {
+      const HeatmapRow& row = sample.rows[rowIdx];
+      csv += json_escape(sample.tag) + ",";
+      csv += String(sample.timestamp) + ",";
+      csv += String(ageSeconds) + ",";
+      csv += json_escape(row.ssid) + ",";
+      csv += json_escape(row.bssid) + ",";
+      csv += String(row.channel) + ",";
+      csv += String(row.rssi) + "\n";
+    }
+  }
+  server.sendHeader("Content-Disposition",
+                    "attachment; filename=\"jesse-heatmap.csv\"");
+  server.send(200, "text/csv", csv);
+}
+
+void handle_heatmap_clear() {
+  for (size_t i = 0; i < g_heatmapCount; i++) {
+    g_heatmapSamples[i].tag = String();
+    g_heatmapSamples[i].timestamp = 0;
+    g_heatmapSamples[i].rowCount = 0;
+    for (uint8_t r = 0; r < MAX_HEATMAP_ROWS_PER_SAMPLE; r++) {
+      g_heatmapSamples[i].rows[r].ssid = String();
+      g_heatmapSamples[i].rows[r].bssid = String();
+      g_heatmapSamples[i].rows[r].channel = 0;
+      g_heatmapSamples[i].rows[r].rssi = 0;
+    }
+  }
+  g_heatmapCount = 0;
+  g_heatmapSnapshotPending = false;
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", "{\"cleared\":true}");
 }

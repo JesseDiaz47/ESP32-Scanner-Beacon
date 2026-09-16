@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32 Scanner Beacon — cover artwork</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:1600px;height:900px;overflow:hidden}
+body{background:#090d12;color:#edf5ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.canvas{height:900px;padding:60px 64px;position:relative}
+.top{display:flex;align-items:center;justify-content:space-between;padding-bottom:27px;border-bottom:1px solid #253141}
+.wordmark{font-size:19px;font-weight:720;letter-spacing:.02em}.wordmark span{color:#55d9ff}
+.code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#95a6b9;letter-spacing:.05em}
+.content{display:grid;grid-template-columns:610px 1fr;gap:48px;margin-top:65px}
+.kicker{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#55d9ff;letter-spacing:.17em}
+h1{font-size:72px;line-height:1.02;letter-spacing:-.055em;margin:22px 0 24px;font-weight:760}
+h1 span{color:#55d9ff}
+.lead{font-size:23px;line-height:1.5;max-width:490px;color:#adbdce;margin:0 0 32px}
+.features{display:grid;grid-template-columns:1fr 1fr;gap:20px 18px;padding-top:28px;border-top:1px solid #253141;max-width:530px}
+.feature{font-size:17px;font-weight:600}.feature b{color:#55d9ff;font:12px ui-monospace,monospace;margin-right:9px}.feature small{display:block;font-size:13px;line-height:1.6;color:#8290a3;font-weight:400;padding-left:29px;margin-top:5px}
+.evidence{position:relative;height:606px}
+.phone{position:absolute;right:4px;top:-18px;width:308px;padding:9px;background:#182331;border:1px solid #344152;border-radius:24px;box-shadow:0 24px 60px #0007}
+.phone img{display:block;width:100%;border-radius:16px}
+.channel{position:absolute;left:-8px;top:277px;width:438px;background:#111821;border:1px solid #344152;border-radius:16px;box-shadow:0 20px 50px #0008;overflow:hidden}
+.channel .label{display:flex;justify-content:space-between;padding:16px 19px;border-bottom:1px solid #253141;font-size:13px;font-weight:650}
+.channel .label span{color:#55d9ff;font:11px ui-monospace,monospace}
+.crop{height:209px;position:relative;overflow:hidden;background:#090d12}
+.crop img{position:absolute;display:block;width:438px;top:-94px;left:0}
+.evidence-note{position:absolute;left:0;bottom:3px;color:#8290a3;font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;max-width:300px}
+.footer{position:absolute;left:64px;right:64px;bottom:40px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid #253141;padding-top:22px;color:#8290a3;font-size:13px}
+.footer strong{color:#b8c9d8;font-weight:500}.tag{display:inline-flex;align-items:center;gap:8px}.dot{height:7px;width:7px;background:#62e6a7;border-radius:50%}
+</style>
+</head>
+<body><main class="canvas">
+<div class="top"><div class="wordmark"><span>ESP32</span> / SCANNER BEACON</div><div class="code">WI-FI + BLUETOOTH LE · EXPERIMENTAL</div></div>
+<div class="content">
+<section><div class="kicker">A LOCAL RADIO FIELD TOOL</div><h1>One board.<br>Your phone.<br><span>A clearer signal.</span></h1>
+<p class="lead">Survey nearby Wi-Fi, discover BLE devices, and tag signal readings as you walk.</p>
+<div class="features">
+<div class="feature"><b>01</b>Wi-Fi survey<small>SSIDs · channel · RSSI</small></div>
+<div class="feature"><b>02</b>Channel view<small>See where networks cluster</small></div>
+<div class="feature"><b>03</b>BLE discovery<small>On-demand scan + iBeacon</small></div>
+<div class="feature"><b>04</b>Signal log<small>Named spots · CSV export*</small></div>
+</div></section>
+<section class="evidence" aria-label="Real UI screenshots with synthetic data">
+<div class="phone"><img src="../images/phone.png" alt="Phone view of actual Networks tab with synthetic data"></div>
+<div class="channel"><div class="label">THE CHANNEL VIEW<span>ACTUAL UI / DEMO DATA</span></div><div class="crop"><img src="../images/channels.png" alt="Detail crop of the actual channel-count chart"></div></div>
+<div class="evidence-note">Actual embedded web UI.<br>Synthetic data. No private networks shown.<br>* Export hardening tracked before release.</div>
+</section>
+</div>
+<footer class="footer"><strong class="tag"><i class="dot"></i>Hosted on the ESP32. No cloud required.</strong><span>Jesse Diaz · esp32-scanner-beacon</span></footer>
+</main></body></html>
