@@ -1,0 +1,76 @@
+{
+  "provenance": "Live capture from an ESP32-WROOM-32 running this firmware. Real radio observations, not synthetic fixtures. SSIDs and BLE device names are replaced with stable pseudonyms (AP-nn, Device-n). BLE addresses that rotate on their own are as captured; static-random and public ones are replaced with stand-ins that preserve the address class. All counts, channels, RSSI values and company IDs are as captured.",
+  "captured_utc": "2026-09-16T04:17:09+00:00",
+  "host": "192.168.4.1",
+  "captured_by": "Darwin 25.6.0",
+  "wifi": {
+    "sweeps": 6,
+    "per_sweep_counts": [
+      28,
+      30,
+      26,
+      27,
+      30,
+      23
+    ],
+    "unique_networks": 39,
+    "hidden": 4,
+    "open": 0,
+    "strongest_rssi": -21,
+    "weakest_rssi": -96,
+    "busiest_channel": 6,
+    "channel_counts": {
+      "1": 7,
+      "2": 4,
+      "3": 1,
+      "4": 1,
+      "5": 4,
+      "6": 11,
+      "8": 1,
+      "9": 1,
+      "10": 4,
+      "11": 5
+    }
+  },
+  "ble": {
+    "devices": 28,
+    "named": 4,
+    "with_company_id": 24,
+    "company_counts": {
+      "76": 19,
+      "-1": 4,
+      "6": 2,
+      "117": 2,
+      "65535": 1
+    },
+    "strongest_rssi": -43,
+    "addresses_published_as_captured": 18,
+    "addresses_replaced": 10
+  },
+  "heatmap": {
+    "real": false,
+    "note": "MOCK rows carried over from fixtures.json; no walk performed.",
+    "tags": [
+      "Porch",
+      "Studio"
+    ],
+    "rows": 12,
+    "csv_bytes": 0,
+    "csv_sha256": null
+  },
+  "files": {
+    "wifi-survey.csv": {
+      "bytes": 4008,
+      "sha256": "82be075e0b9e2bfd3f9aa856a75024c386d2e4367d6ac39ab2b0acb0e716b731"
+    },
+    "ble-devices.csv": {
+      "bytes": 793,
+      "sha256": "c3f138017f7a85619dbf240045c4258b82080f7e4de74b14510974b74eb40516"
+    }
+  },
+  "identifiers_pseudonymised": [
+    "wifi ssid",
+    "ble name",
+    "ble address (static/public only)"
+  ]
+}

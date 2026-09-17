@@ -1,0 +1,529 @@
+{
+  "notice": "Wi-Fi and BLE are a REAL capture from an ESP32 running this firmware: real sweep counts, channels, RSSI and BLE company IDs. SSIDs and BLE device names are stable pseudonyms (AP-nn, Device-n). BLE addresses that rotate on their own are published as captured; the ten that are static-random or public are replaced with stand-ins of the same address class. Every measurement is untouched. The heatmap rows are synthetic.",
+  "wifi_real": true,
+  "ble_real": true,
+  "heatmap_real": false,
+  "captured_utc": "2026-09-16T04:17:09+00:00",
+  "wifi": [
+    {
+      "ssid": "AP-01",
+      "rssi": -21,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-02",
+      "rssi": -56,
+      "channel": 10,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-03",
+      "rssi": -56,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-04",
+      "rssi": -58,
+      "channel": 5,
+      "encrypted": true
+    },
+    {
+      "ssid": "",
+      "rssi": -58,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-05",
+      "rssi": -72,
+      "channel": 9,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-06",
+      "rssi": -73,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-07",
+      "rssi": -75,
+      "channel": 11,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-08",
+      "rssi": -77,
+      "channel": 10,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-09",
+      "rssi": -78,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-10",
+      "rssi": -79,
+      "channel": 5,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-11",
+      "rssi": -79,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-12",
+      "rssi": -81,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-13",
+      "rssi": -82,
+      "channel": 10,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-14",
+      "rssi": -83,
+      "channel": 10,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-15",
+      "rssi": -83,
+      "channel": 11,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-16",
+      "rssi": -84,
+      "channel": 2,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-17",
+      "rssi": -84,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-18",
+      "rssi": -84,
+      "channel": 8,
+      "encrypted": true
+    },
+    {
+      "ssid": "",
+      "rssi": -85,
+      "channel": 2,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-19",
+      "rssi": -85,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-20",
+      "rssi": -86,
+      "channel": 2,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-21",
+      "rssi": -87,
+      "channel": 4,
+      "encrypted": true
+    },
+    {
+      "ssid": "",
+      "rssi": -88,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-22",
+      "rssi": -88,
+      "channel": 11,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-23",
+      "rssi": -89,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-24",
+      "rssi": -89,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-25",
+      "rssi": -89,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-26",
+      "rssi": -89,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-27",
+      "rssi": -89,
+      "channel": 5,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-28",
+      "rssi": -90,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-29",
+      "rssi": -90,
+      "channel": 5,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-30",
+      "rssi": -92,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "",
+      "rssi": -92,
+      "channel": 11,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-31",
+      "rssi": -93,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-32",
+      "rssi": -93,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-33",
+      "rssi": -93,
+      "channel": 11,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-34",
+      "rssi": -94,
+      "channel": 3,
+      "encrypted": true
+    },
+    {
+      "ssid": "AP-35",
+      "rssi": -96,
+      "channel": 2,
+      "encrypted": true
+    }
+  ],
+  "ble": [
+    {
+      "name": "",
+      "address": "54:6d:1d:db:9b:f0",
+      "rssi": -43,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "45:d5:cd:15:c6:78",
+      "rssi": -44,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "d3:bc:fc:fe:62:cc",
+      "rssi": -57,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "58:5f:a1:e8:89:9a",
+      "rssi": -60,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "56:0e:c9:e8:82:9c",
+      "rssi": -63,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "79:85:c6:f3:a7:74",
+      "rssi": -64,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "4d:22:8e:15:58:d1",
+      "rssi": -65,
+      "company": 76
+    },
+    {
+      "name": "Device-1",
+      "address": "d2:9f:ba:8b:e8:0b",
+      "rssi": -68,
+      "company": 65535
+    },
+    {
+      "name": "",
+      "address": "dc:21:eb:8f:62:95",
+      "rssi": -69,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "c0:fb:dc:a9:76:3f",
+      "rssi": -75,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "70:f7:88:b4:18:a1",
+      "rssi": -83,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "c1:3f:11:d8:11:63",
+      "rssi": -85,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "28:4f:77:63:93:fa",
+      "rssi": -87,
+      "company": 6
+    },
+    {
+      "name": "",
+      "address": "44:5c:e9:ba:db:95",
+      "rssi": -87,
+      "company": 117
+    },
+    {
+      "name": "Device-2",
+      "address": "c8:79:c0:08:43:ab",
+      "rssi": -87,
+      "company": -1
+    },
+    {
+      "name": "",
+      "address": "c3:24:13:0e:13:25",
+      "rssi": -87,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "69:fa:41:94:88:80",
+      "rssi": -88,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "07:34:14:a8:d6:a1",
+      "rssi": -89,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "31:f3:dd:d4:df:aa",
+      "rssi": -89,
+      "company": 6
+    },
+    {
+      "name": "",
+      "address": "4d:be:2d:ec:45:41",
+      "rssi": -89,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "79:60:6a:ab:be:76",
+      "rssi": -89,
+      "company": -1
+    },
+    {
+      "name": "",
+      "address": "5f:cc:4a:1f:c0:58",
+      "rssi": -90,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "41:a7:31:75:41:9b",
+      "rssi": -92,
+      "company": 76
+    },
+    {
+      "name": "",
+      "address": "53:a6:c4:f5:da:bf",
+      "rssi": -92,
+      "company": 117
+    },
+    {
+      "name": "",
+      "address": "f8:dd:99:49:4a:88",
+      "rssi": -93,
+      "company": 76
+    },
+    {
+      "name": "Device-3",
+      "address": "bf:54:5f:da:29:3b",
+      "rssi": -97,
+      "company": -1
+    },
+    {
+      "name": "Device-4",
+      "address": "cd:8c:35:3e:6e:c7",
+      "rssi": -98,
+      "company": -1
+    },
+    {
+      "name": "",
+      "address": "72:5f:6d:4a:c4:1e",
+      "rssi": -102,
+      "company": 76
+    }
+  ],
+  "heatmap": [
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Studio",
+      "bssid": "02:8B:74:A6:EF:A1",
+      "channel": 6,
+      "rssi": -38
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Workbench",
+      "bssid": "02:52:EA:CF:61:E8",
+      "channel": 1,
+      "rssi": -46
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Guest",
+      "bssid": "02:32:E7:8A:44:AF",
+      "channel": 11,
+      "rssi": -53
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Sensor Net",
+      "bssid": "02:49:8F:84:BC:0A",
+      "channel": 6,
+      "rssi": -59
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Workshop",
+      "bssid": "02:8F:5F:17:7A:3F",
+      "channel": 1,
+      "rssi": -63
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Annex",
+      "bssid": "02:64:00:37:15:DD",
+      "channel": 6,
+      "rssi": -67
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Guest",
+      "bssid": "02:32:E7:8A:44:AF",
+      "channel": 11,
+      "rssi": -45
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Studio",
+      "bssid": "02:8B:74:A6:EF:A1",
+      "channel": 6,
+      "rssi": -58
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Workbench",
+      "bssid": "02:52:EA:CF:61:E8",
+      "channel": 1,
+      "rssi": -64
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Sensor Net",
+      "bssid": "02:49:8F:84:BC:0A",
+      "channel": 6,
+      "rssi": -71
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Workshop",
+      "bssid": "02:8F:5F:17:7A:3F",
+      "channel": 1,
+      "rssi": -76
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Annex",
+      "bssid": "02:64:00:37:15:DD",
+      "channel": 6,
+      "rssi": -81
+    }
+  ],
+  "ssids_pseudonymised": true,
+  "identifiers_pseudonymised": [
+    "wifi ssid",
+    "ble name",
+    "ble address (static/public only)"
+  ]
+}
