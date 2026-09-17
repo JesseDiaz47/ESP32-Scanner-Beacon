@@ -103,6 +103,10 @@ size_t g_bleEntryCount = 0;
 BLEAdvertising* g_bleAdvertising = nullptr;
 BLEScan* g_bleScan = nullptr;
 volatile bool g_bleScanCallbackPending = false;
+// Whether advertising has actually been commanded on, as opposed to whether the
+// coordinator thinks it should be running. The UI reports this instead of
+// assuming the beacon came back after a scan.
+bool g_bleAdvertisingActive = false;
 
 // ─── RSSI heatmap state ─────────────────────────────────────────────────────
 // A snapshot is a tagged bundle of up to 6 APs (SSID, BSSID, channel, RSSI)
@@ -166,6 +170,33 @@ void handle_heatmap_csv();
 void handle_heatmap_clear();
 SnapshotRequest schedule_heatmap_snapshot(const String& tag);
 void capture_heatmap_snapshot(const String& tag);
+
+// ─── Radio state helpers ────────────────────────────────────────────────────
+// Every advertising start/stop goes through these, so g_bleAdvertisingActive
+// cannot drift away from what the radio was actually told to do.
+static void start_advertising() {
+  if (!g_bleAdvertising) return;
+  g_bleAdvertising->start();
+  g_bleAdvertisingActive = true;
+}
+
+static void stop_advertising() {
+  if (!g_bleAdvertising) return;
+  g_bleAdvertising->stop();
+  g_bleAdvertisingActive = false;
+}
+
+// What the shared 2.4 GHz radio is doing right now, for the UI's status badge.
+static const char* radio_state_name() {
+  if (g_otaActive) return "ota";
+  switch (g_radio.state()) {
+    case RadioState::Ota:          return "ota";
+    case RadioState::BleRequested: return "ble-pending";
+    case RadioState::BleScanning:  return "ble-scan";
+    case RadioState::Ready:        return "ready";
+  }
+  return "ready";
+}
 
 // ─── Arduino entry points ───────────────────────────────────────────────────
 void setup() {
@@ -352,7 +383,7 @@ void setup_ble() {
   g_bleAdvertising->setAdvertisementType(ADV_TYPE_NONCONN_IND);
   g_bleAdvertising->setMinInterval(160);
   g_bleAdvertising->setMaxInterval(320);
-  g_bleAdvertising->start();
+  start_advertising();
 
   // Passive discovery listens only. Short window leaves room for the WiFi AP.
   g_bleScan->setActiveScan(false);
@@ -377,12 +408,12 @@ void begin_ble_scan() {
     return;
   }
 
-  g_bleAdvertising->stop();
+  stop_advertising();
   digitalWrite(PIN_BLE_LED, HIGH);
   g_bleScan->clearResults();
   if (!g_bleScan->start(BLE_SCAN_SECONDS, on_ble_scan_complete, false)) {
     g_radio.cancelBleScan();
-    g_bleAdvertising->start();
+    start_advertising();
     digitalWrite(PIN_BLE_LED, LOW);
     Serial.println("[ble-scan] failed to start; iBeacon resumed");
     return;
@@ -422,8 +453,8 @@ void complete_ble_scan() {
   g_bleScan->clearResults();
   g_lastScanStart = millis();  // let the AP settle before the next WiFi sweep
 
-  if (!g_otaActive && g_bleAdvertising) {
-    g_bleAdvertising->start();
+  if (!g_otaActive) {
+    start_advertising();
   }
   digitalWrite(PIN_BLE_LED, LOW);
   Serial.printf("[ble-scan] complete — %u devices; iBeacon resumed\n",
@@ -464,9 +495,7 @@ void setup_ota() {
     if (bleWasScanning && g_bleScan) {
       g_bleScan->stop();
     }
-    if (g_bleAdvertising) {
-      g_bleAdvertising->stop();
-    }
+    stop_advertising();
     digitalWrite(PIN_BLE_LED, LOW);
     Serial.println("\n[ota] upload started — radio surveys suspended");
   });
@@ -489,9 +518,7 @@ void setup_ota() {
   ArduinoOTA.onError([](ota_error_t error) {
     g_otaActive = false;
     g_radio.finishOta();
-    if (g_bleAdvertising) {
-      g_bleAdvertising->start();
-    }
+    start_advertising();
     const char* message = "unknown";
     switch (error) {
       case OTA_AUTH_ERROR:    message = "auth failed"; break;
@@ -644,7 +671,12 @@ void handle_scan_json() {
     body += "\"channel\":"   + String(g_entries[i].channel) + ",";
     body += "\"encrypted\":" + String(g_entries[i].encrypted ? "true" : "false") + "}";
   }
-  body += "]}";
+  body += "],";
+  body += "\"radio\":\""      + String(radio_state_name()) + "\",";
+  body += "\"sweeping\":"    + String(g_scanInProgress ? "true" : "false") + ",";
+  body += "\"advertising\":" + String(g_bleAdvertisingActive ? "true" : "false") + ",";
+  body += "\"sweeps\":"      + String(g_scanCompletedCount);
+  body += "}";
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", body);
 }
@@ -669,7 +701,9 @@ void handle_ble_scan() {
 void handle_ble_json() {
   bool scanning = g_radio.state() == RadioState::BleRequested ||
                   g_radio.state() == RadioState::BleScanning;
-  String body = "{\"scanning\":" + String(scanning ? "true" : "false") + ",\"entries\":[";
+  String body = "{\"scanning\":" + String(scanning ? "true" : "false") + ",";
+  body += "\"advertising\":" + String(g_bleAdvertisingActive ? "true" : "false") + ",";
+  body += "\"entries\":[";
   for (size_t i = 0; i < g_bleEntryCount; i++) {
     if (i) body += ",";
     body += "{\"name\":\"" + json_escape(g_bleEntries[i].name) + "\",";
@@ -728,8 +762,10 @@ void handle_heatmap_json() {
       firstRow = false;
       const HeatmapRow& row = sample.rows[rowIdx];
       body += "{\"tag\":\"" + json_escape(sample.tag) + "\",";
+      body += "\"sample\":" + String((unsigned long)(sampleIdx - 1)) + ",";
       body += "\"age\":" + String(ageSeconds) + ",";
       body += "\"ssid\":\"" + json_escape(row.ssid) + "\",";
+      body += "\"bssid\":\"" + json_escape(row.bssid) + "\",";
       body += "\"channel\":" + String(row.channel) + ",";
       body += "\"rssi\":" + String(row.rssi) + "}";
     }

@@ -309,14 +309,40 @@ function renderNetworks(list) {
   renderChannels(latestNetworks);
 }
 
+var radioPollMisses = 0;
+
+// The badge reports what the board says its radio is doing. It used to print
+// 'Live' whenever a BLE scan was not running — which was equally true of a
+// stalled poll and of a board that had stopped answering altogether.
+function updateRadioBadge(data) {
+  var badge = document.getElementById('radioState');
+  if (!data) {
+    radioPollMisses++;
+    // One miss is expected: a sweep moves the radio off the AP's channel.
+    if (radioPollMisses > 2) badge.textContent = 'No signal';
+    return;
+  }
+  radioPollMisses = 0;
+  if (data.radio === 'ota') badge.textContent = 'Updating';
+  else if (data.radio === 'ble-scan') badge.textContent = 'BLE scan';
+  else if (data.radio === 'ble-pending') badge.textContent = 'BLE queued';
+  else if (data.sweeping) badge.textContent = 'Sweeping';
+  else badge.textContent = 'Live';
+}
+
 async function tickWifi() {
   try {
     var response = await fetch('/scan.json', { cache: 'no-store' });
-    renderNetworks((await response.json()).entries || []);
+    var data = await response.json();
+    renderNetworks(data.entries || []);
+    updateRadioBadge(data);
   } catch (error) {
     // A radio sweep briefly moves away from the AP channel. Keep the last result.
+    updateRadioBadge(null);
   }
 }
+
+var bleWasScanning = false;
 
 function renderBle(data) {
   var button = document.getElementById('bleScanButton');
@@ -324,10 +350,20 @@ function renderBle(data) {
   var radio = document.getElementById('radioState');
   button.disabled = !!data.scanning;
   button.textContent = data.scanning ? 'Scanning…' : 'Scan Bluetooth for 5s';
-  radio.textContent = data.scanning ? 'BLE scan' : 'Live';
+  // Only the scanning case is set here; tickWifi owns the badge otherwise,
+  // because the poll is what knows whether the board is still answering. When a
+  // scan ends, ask the board what the radio is doing now rather than assuming
+  // 'Live' — and rather than leaving a stale 'BLE scan' until the next poll.
+  if (data.scanning) {
+    radio.textContent = 'BLE scan';
+  } else if (bleWasScanning) {
+    tickWifi();
+  }
+  bleWasScanning = !!data.scanning;
   status.textContent = data.scanning
     ? 'Listening now. The page may pause while the shared radio scans.'
-    : data.entries.length + ' devices found. The iBeacon is broadcasting again.';
+    : data.entries.length + ' devices found. ' +
+      (data.advertising ? 'The iBeacon is advertising.' : 'The iBeacon is not advertising.');
   var list = data.entries.slice().sort(function (a, b) { return b.rssi - a.rssi; });
   var body = document.getElementById('bleRows');
   if (!list.length) { emptyRow(body, 3, data.scanning ? 'Listening…' : 'No BLE devices captured yet'); return; }
@@ -381,17 +417,22 @@ function renderHeatmap(data) {
   var samples = document.getElementById('heatmapSamples');
   var unique = document.getElementById('heatmapUnique');
   var latest = document.getElementById('heatmapLatest');
-  samples.textContent = data.entries.length;
+  var snapshots = {};
   var seen = {};
   var newestTag = '—';
   data.entries.forEach(function (entry) {
-    seen[entry.ssid || '(hidden)'] = true;
+    snapshots[entry.sample] = true;
+    // Distinct radios, not distinct names: a mesh or an extender puts one SSID
+    // on several BSSIDs, and a hidden network has no name at all.
+    seen[entry.bssid || entry.ssid || '(hidden)'] = true;
     if (newestTag === '—') newestTag = entry.tag;
   });
+  var sampleCount = Object.keys(snapshots).length;
+  samples.textContent = sampleCount;
   unique.textContent = Object.keys(seen).length;
   latest.textContent = newestTag;
   status.textContent = data.entries.length
-    ? 'Newest first · ' + data.entries.length + ' samples · top of stack is ' + data.entries[0].age + 's old.'
+    ? 'Newest first · ' + sampleCount + ' samples · ' + data.entries.length + ' readings · top of stack is ' + data.entries[0].age + 's old.'
     : 'No samples yet. Walk to a spot, name it, and tap Tag & log.';
 
   var body = document.getElementById('heatmapRows');

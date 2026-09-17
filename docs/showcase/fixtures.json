@@ -1,39 +1,225 @@
 {
   "notice": "Synthetic screenshot fixtures. These are not real network observations or hardware test results.",
   "wifi": [
-    {"ssid": "Demo Studio", "rssi": -38, "channel": 6, "encrypted": true},
-    {"ssid": "Demo Workbench", "rssi": -46, "channel": 1, "encrypted": true},
-    {"ssid": "Demo Guest", "rssi": -53, "channel": 11, "encrypted": false},
-    {"ssid": "Demo Sensor Net", "rssi": -59, "channel": 6, "encrypted": true},
-    {"ssid": "Demo Workshop", "rssi": -63, "channel": 1, "encrypted": true},
-    {"ssid": "Demo Annex", "rssi": -67, "channel": 6, "encrypted": true},
-    {"ssid": "Demo Office", "rssi": -71, "channel": 6, "encrypted": true},
-    {"ssid": "Demo Patio", "rssi": -74, "channel": 11, "encrypted": true},
-    {"ssid": "", "rssi": -78, "channel": 1, "encrypted": true},
-    {"ssid": "Demo Print Lab", "rssi": -82, "channel": 3, "encrypted": true},
-    {"ssid": "Demo Storage", "rssi": -85, "channel": 6, "encrypted": true},
-    {"ssid": "Demo Garage", "rssi": -89, "channel": 1, "encrypted": true}
+    {
+      "ssid": "Demo Studio",
+      "rssi": -38,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Workbench",
+      "rssi": -46,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Guest",
+      "rssi": -53,
+      "channel": 11,
+      "encrypted": false
+    },
+    {
+      "ssid": "Demo Sensor Net",
+      "rssi": -59,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Workshop",
+      "rssi": -63,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Annex",
+      "rssi": -67,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Office",
+      "rssi": -71,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Patio",
+      "rssi": -74,
+      "channel": 11,
+      "encrypted": true
+    },
+    {
+      "ssid": "",
+      "rssi": -78,
+      "channel": 1,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Print Lab",
+      "rssi": -82,
+      "channel": 3,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Storage",
+      "rssi": -85,
+      "channel": 6,
+      "encrypted": true
+    },
+    {
+      "ssid": "Demo Garage",
+      "rssi": -89,
+      "channel": 1,
+      "encrypted": true
+    }
   ],
   "ble": [
-    {"name": "Demo beacon", "address": "02:00:00:00:00:01", "rssi": -41, "company": 76},
-    {"name": "Demo sensor", "address": "02:00:00:00:00:02", "rssi": -52, "company": 89},
-    {"name": "Demo bench node", "address": "02:00:00:00:00:03", "rssi": -60, "company": -1},
-    {"name": "Demo tag", "address": "02:00:00:00:00:04", "rssi": -67, "company": 76},
-    {"name": "Demo room sensor", "address": "02:00:00:00:00:05", "rssi": -76, "company": 89},
-    {"name": "", "address": "02:00:00:00:00:06", "rssi": -85, "company": -1}
+    {
+      "name": "Demo beacon",
+      "address": "02:00:00:00:00:01",
+      "rssi": -41,
+      "company": 76
+    },
+    {
+      "name": "Demo sensor",
+      "address": "02:00:00:00:00:02",
+      "rssi": -52,
+      "company": 89
+    },
+    {
+      "name": "Demo bench node",
+      "address": "02:00:00:00:00:03",
+      "rssi": -60,
+      "company": -1
+    },
+    {
+      "name": "Demo tag",
+      "address": "02:00:00:00:00:04",
+      "rssi": -67,
+      "company": 76
+    },
+    {
+      "name": "Demo room sensor",
+      "address": "02:00:00:00:00:05",
+      "rssi": -76,
+      "company": 89
+    },
+    {
+      "name": "",
+      "address": "02:00:00:00:00:06",
+      "rssi": -85,
+      "company": -1
+    }
   ],
   "heatmap": [
-    {"tag": "Studio", "age": 8, "ssid": "Demo Studio", "channel": 6, "rssi": -38},
-    {"tag": "Studio", "age": 8, "ssid": "Demo Workbench", "channel": 1, "rssi": -46},
-    {"tag": "Studio", "age": 8, "ssid": "Demo Guest", "channel": 11, "rssi": -53},
-    {"tag": "Studio", "age": 8, "ssid": "Demo Sensor Net", "channel": 6, "rssi": -59},
-    {"tag": "Studio", "age": 8, "ssid": "Demo Workshop", "channel": 1, "rssi": -63},
-    {"tag": "Studio", "age": 8, "ssid": "Demo Annex", "channel": 6, "rssi": -67},
-    {"tag": "Porch", "age": 74, "ssid": "Demo Guest", "channel": 11, "rssi": -45},
-    {"tag": "Porch", "age": 74, "ssid": "Demo Studio", "channel": 6, "rssi": -58},
-    {"tag": "Porch", "age": 74, "ssid": "Demo Workbench", "channel": 1, "rssi": -64},
-    {"tag": "Porch", "age": 74, "ssid": "Demo Sensor Net", "channel": 6, "rssi": -71},
-    {"tag": "Porch", "age": 74, "ssid": "Demo Workshop", "channel": 1, "rssi": -76},
-    {"tag": "Porch", "age": 74, "ssid": "Demo Annex", "channel": 6, "rssi": -81}
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Studio",
+      "bssid": "02:8B:74:A6:EF:A1",
+      "channel": 6,
+      "rssi": -38
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Workbench",
+      "bssid": "02:52:EA:CF:61:E8",
+      "channel": 1,
+      "rssi": -46
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Guest",
+      "bssid": "02:32:E7:8A:44:AF",
+      "channel": 11,
+      "rssi": -53
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Sensor Net",
+      "bssid": "02:49:8F:84:BC:0A",
+      "channel": 6,
+      "rssi": -59
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Workshop",
+      "bssid": "02:8F:5F:17:7A:3F",
+      "channel": 1,
+      "rssi": -63
+    },
+    {
+      "tag": "Studio",
+      "sample": 1,
+      "age": 8,
+      "ssid": "Demo Annex",
+      "bssid": "02:64:00:37:15:DD",
+      "channel": 6,
+      "rssi": -67
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Guest",
+      "bssid": "02:32:E7:8A:44:AF",
+      "channel": 11,
+      "rssi": -45
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Studio",
+      "bssid": "02:8B:74:A6:EF:A1",
+      "channel": 6,
+      "rssi": -58
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Workbench",
+      "bssid": "02:52:EA:CF:61:E8",
+      "channel": 1,
+      "rssi": -64
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Sensor Net",
+      "bssid": "02:49:8F:84:BC:0A",
+      "channel": 6,
+      "rssi": -71
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Workshop",
+      "bssid": "02:8F:5F:17:7A:3F",
+      "channel": 1,
+      "rssi": -76
+    },
+    {
+      "tag": "Porch",
+      "sample": 0,
+      "age": 74,
+      "ssid": "Demo Annex",
+      "bssid": "02:64:00:37:15:DD",
+      "channel": 6,
+      "rssi": -81
+    }
   ]
 }

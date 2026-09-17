@@ -7,8 +7,8 @@
     "heatmap": false
   },
   "captured_utc": "2026-09-16T04:17:09+00:00",
-  "source_sha256": "c1df08dd195c7f7af9541b73ec43462c13cc951001b2d8514b5a54425c9bda14",
-  "fixtures_sha256": "556bceb71050b3b39cacf62fd928d95e90eab1eef4a465eeb65b30e5add23da2",
+  "source_sha256": "71d5bff5d68bf8f8d9f51a28e179ae7b9d1c01a243b49b6695e2d23c3c65a7f0",
+  "fixtures_sha256": "5907d26050ee504c73defc53e2b5356d6bf7b13b4cbd2ea0d0ca092c0b5e00c8",
   "browser_version": "148.0.7778.96",
   "assets": [
     {
@@ -50,8 +50,8 @@
         1744
       ],
       "tab": "ble",
-      "sha256": "041d69d2532260558e6e06e6dd351577c0a0a06e1462606d4c03f90dfbfb7efe",
-      "bytes": 206833
+      "sha256": "cd5abd522c3b646a5dafc4300bb0c6f768bb4e31d886edd7066cc9be8c1bc007",
+      "bytes": 205635
     },
     {
       "file": "heatmap.png",
@@ -64,8 +64,8 @@
         1758
       ],
       "tab": "heatmap",
-      "sha256": "7dd53e2d078cba7e66cba2c8aad280de3d3e9393509934a2dbb696ebb14d7411",
-      "bytes": 201172
+      "sha256": "92a9491ad0a7d23df10be8b04847583bad89ed31f4280338001a8abbe16f5d66",
+      "bytes": 203463
     },
     {
       "file": "phone.png",

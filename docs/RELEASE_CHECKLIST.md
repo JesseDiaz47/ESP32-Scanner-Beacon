@@ -128,13 +128,26 @@ columns. What is left is one security decision and time on the board.
 - [x] Clarify the CSV time column: the header is now `boot_ms`, not `epoch_ms`,
       because the value is `millis()` since power-on. Nothing on this board
       knows wall-clock time. `tools/capture_showcase.py` emits the same header.
-- [ ] Review heatmap metric names: "Samples" counts network rows, while
-      "Unique APs" currently deduplicates SSIDs, not BSSIDs. Distinct APs can
-      share an SSID. (Now that BSSIDs are actually captured, this can be fixed
-      properly.)
-- [ ] Make "Live" / "iBeacon broadcasting again" reflect actual radio state and
-      successful polls, rather than relying on optimistic UI text. The tag
-      button no longer lies; these two labels still can.
+- [x] **Heatmap metrics now mean what they say.** "Samples" counts distinct
+      snapshots rather than the flattened row list, and "Unique APs"
+      deduplicates BSSIDs rather than SSIDs — a mesh or extender puts one SSID
+      on several radios, and every hidden network shared a single name bucket.
+      Neither was fixable before this round, because `/heatmap.json` carried no
+      BSSID; it now emits `bssid` and a `sample` id per row. The status line
+      distinguishes samples from readings. Pinned by
+      `test_unique_ap_count_deduplicates_radios_not_names`.
+- [x] **"Live" and the iBeacon text now reflect the actual radio.** `/scan.json`
+      reports `radio` (`ready` / `ble-pending` / `ble-scan` / `ota`), `sweeping`
+      and `advertising`, and the badge is driven by that poll: it shows
+      `Sweeping`, `BLE scan`, `BLE queued`, `Updating`, or `No signal` after
+      three consecutive missed polls. Previously it printed `Live` whenever a
+      BLE scan was not running, which was equally true of a stalled poll and of
+      a board that had stopped answering. Advertising is no longer assumed
+      either: every start/stop goes through `start_advertising()` /
+      `stop_advertising()`, which record what the radio was actually commanded
+      to do, and the UI reports that flag instead of asserting the beacon "is
+      broadcasting again". Pinned by `test_status_badge_reports_real_radio_state`
+      and `test_advertising_state_is_tracked_not_assumed`.
 
 ## Required device acceptance pass
 
@@ -183,12 +196,12 @@ All commands below were run unpiped on 2026-09-16 after the fixes.
 
 | Check | Result | What it establishes |
 | --- | --- | --- |
-| Python source contracts | 16 passed | Expected source/interface contracts exist, including BSSID copy order, single-success-branch reporting, the shared encoder, and the OTA guards. Not live behavior. |
+| Python source contracts | 19 passed | Expected source/interface contracts exist, including BSSID copy order, single-success-branch reporting, the shared encoder, the OTA guards, real radio-state reporting, tracked advertising state, and BSSID-based AP counting. Not live behavior. |
 | `tests/test_heatmap_csv.cpp` | 12 passed under both `-std=c++11` and `-std=c++17`, `-Wall -Wextra -Werror` | The shipped RFC 4180 encoder, round-tripped through an independently written parser. |
 | Same suite vs. the pre-fix encoder | 18 assertions failed | The tests actually detect the bugs they describe. |
 | Real `RadioCoordinator` C++ tests | 4 passed with `-Wall -Wextra -Werror` | Host-side lifecycle and OTA preemption state behavior. |
 | `tests/browser_ui.py` | Passed | Corrected labels, channel count/color, phone input sizing, and 12 tab/viewport combinations in Chromium. |
-| `tools/capture_showcase.py --fixtures live-fixtures.json` | Passed, no browser errors | Real rows through the real UI literal, including the rewritten tag/log path. Screenshots re-rendered byte-identical; only the provenance hash moved. |
+| `tools/capture_showcase.py` (synthetic and `--fixtures live-fixtures.json`) | Passed, no browser errors | Real rows through the real UI literal, including the rewritten tag/log path and the corrected metrics. Its heatmap assertions were updated to the new semantics (snapshots, not rows; BSSIDs, not SSIDs) and the fixtures gained `sample` and synthetic `bssid` fields, without which the corrected metrics have nothing to count. |
 | Configured firmware build | Passed | 70,220 bytes RAM (21.4%); 1,643,065 bytes flash (83.6%) in the selected app slot. The BSSID cache costs ~1 KB RAM. |
 | Clean copied source without `include/secrets.h` | Passed | 1,615,925 bytes flash, OTA disabled. A new user can compile without personal credentials. |
 | Clean copy with the verbatim example header | Build failed as designed | The placeholder OTA password cannot reach a board. |

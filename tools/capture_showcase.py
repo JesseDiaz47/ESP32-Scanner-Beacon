@@ -76,7 +76,17 @@ def main():
     records = []
     errors = []
     requests = []
-    state = {"scan_until": 0.0, "heatmap": list(fixtures["heatmap"])}
+    # sample_seq continues past the static fixtures' ids so a tagged snapshot
+    # is counted as a new sample rather than merging into an existing one.
+    state = {"scan_until": 0.0, "heatmap": list(fixtures["heatmap"]),
+             "sample_seq": max((row["sample"] for row in fixtures["heatmap"]), default=-1)}
+
+    def demo_bssid(ssid: str) -> str:
+        """Deterministic, obviously-synthetic BSSID for fixture rows. The 02:
+        prefix marks a locally administered address, so it cannot collide with a
+        real vendor OUI."""
+        digest = hashlib.sha256(ssid.encode("utf-8")).hexdigest()
+        return ":".join(["02"] + [digest[i:i + 2] for i in range(0, 10, 2)]).upper()
 
     def serve(route):
         url = urlparse(route.request.url)
@@ -86,9 +96,18 @@ def main():
         if url.path == "/":
             route.fulfill(body=html, content_type="text/html")
         elif url.path == "/scan.json":
-            route.fulfill(json={"entries": fixtures["wifi"]})
+            scanning = time.monotonic() < state["scan_until"]
+            route.fulfill(json={
+                "entries": fixtures["wifi"],
+                "radio": "ble-scan" if scanning else "ready",
+                "sweeping": False,
+                "advertising": not scanning,
+                "sweeps": 6,
+            })
         elif url.path == "/ble.json":
-            route.fulfill(json={"scanning": time.monotonic() < state["scan_until"], "entries": fixtures["ble"]})
+            scanning = time.monotonic() < state["scan_until"]
+            route.fulfill(json={"scanning": scanning, "advertising": not scanning,
+                                "entries": fixtures["ble"]})
         elif url.path == "/ble/scan" and route.request.method == "POST":
             state["scan_until"] = time.monotonic() + 0.35
             route.fulfill(status=202, json={"accepted": True, "scanning": True})
@@ -96,7 +115,11 @@ def main():
             route.fulfill(json={"entries": state["heatmap"]})
         elif url.path == "/heatmap/scan" and route.request.method == "POST":
             tag = parse_qs(url.query).get("tag", ["spot"])[0]
-            rows = [{"tag": tag, "age": 0, **{key: row[key] for key in ("ssid", "channel", "rssi")}} for row in fixtures["wifi"][:6]]
+            state["sample_seq"] += 1
+            rows = [{"tag": tag, "sample": state["sample_seq"], "age": 0,
+                     "bssid": demo_bssid(row["ssid"]),
+                     **{key: row[key] for key in ("ssid", "channel", "rssi")}}
+                    for row in fixtures["wifi"][:6]]
             state["heatmap"] = (rows + state["heatmap"])[:96]
             route.fulfill(status=202, json={"accepted": True, "tag": tag})
         elif url.path == "/heatmap/clear" and route.request.method == "POST":
@@ -108,7 +131,8 @@ def main():
             writer = csv.writer(text)
             writer.writerow(["tag", "boot_ms", "age_s", "ssid", "bssid", "channel", "rssi"])
             for row in state["heatmap"]:
-                writer.writerow([row["tag"], 100000 - row["age"] * 1000, row["age"], row["ssid"], "", row["channel"], row["rssi"]])
+                writer.writerow([row["tag"], 100000 - row["age"] * 1000, row["age"], row["ssid"],
+                                 row.get("bssid", ""), row["channel"], row["rssi"]])
             route.fulfill(body=text.getvalue(), content_type="text/csv", headers={"Content-Disposition": 'attachment; filename="demo-heatmap.csv"'})
         else:
             route.fulfill(status=404, body="Fixture route not found")
@@ -158,9 +182,13 @@ def main():
                 page.wait_for_function("!document.getElementById('bleScanButton').disabled")
                 assert ("POST", "/ble/scan") in requests
             if name == "heatmap":
+                # Samples counts snapshots, not rows; Unique APs counts BSSIDs,
+                # not SSIDs. Both used to be read off the row list.
+                snapshots = len({row["sample"] for row in fixtures["heatmap"]})
+                radios = len({row["bssid"] for row in fixtures["heatmap"]})
                 page.wait_for_function(
-                    f"document.getElementById('heatmapSamples').textContent === '{len(fixtures['heatmap'])}'")
-                assert page.locator("#heatmapUnique").inner_text() == str(len({row["ssid"] for row in fixtures["heatmap"]}))
+                    f"document.getElementById('heatmapSamples').textContent === '{snapshots}'")
+                assert page.locator("#heatmapUnique").inner_text() == str(radios)
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             height = fitted_height(page, MAX_SHOT_HEIGHT)
             page.set_viewport_size({"width": 780, "height": height})
