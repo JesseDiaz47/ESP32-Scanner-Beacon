@@ -10,13 +10,11 @@ tests that fail against the previous implementation; the project is Apache-2.0
 licensed; and the published capture now carries pseudonymised identifier
 columns. What is left is one security decision and time on the board.
 
-> **Flashed firmware is now several revisions behind `main`.** The board is
-> running a build that predates both the UI copy corrections and every fix in
-> this round — its heatmap still writes an empty BSSID column, still exports
-> JSON-escaped pseudo-CSV, and still answers every tag press with
-> `accepted:true`. **Reflash before any acceptance pass**, or the thing under
-> test is not the thing in the repo. The Wi-Fi and BLE JSON endpoints were not
-> touched, so the real rows already captured in `docs/data/` remain valid.
+> **The board now runs current `main`.** Flashed over USB on 2026-09-16 at
+> commit `5ededa8` (1,652,320 bytes written, hash verified, hard reset). The
+> revision skew that invalidated the earlier partial pass is closed: the
+> firmware under test is the firmware in the repo. Everything still unticked
+> below was simply not exercised yet.
 
 ## Correctness blockers
 
@@ -151,15 +149,22 @@ columns. What is left is one security decision and time on the board.
 
 ## Required device acceptance pass
 
-Partially executed 2026-09-16 against firmware that is **now several revisions
-behind `main`**. The ticked items below exercised radio bring-up, Wi-Fi sweeps
-and BLE discovery, none of which changed in this round; the unticked items were
-not performed, and the heatmap items must be run against a reflashed board.
+Partially executed 2026-09-16. Boot bring-up has been re-verified against
+current `main` after the reflash; the other ticked items were exercised on the
+prior build in code paths this round did not change (Wi-Fi sweeps, BLE
+discovery, `MAX_ENTRIES`). Every unticked item below still needs a real run,
+and all of them can now be run directly against the repo's firmware.
 
-- [x] **Board boots and brings up every subsystem.** Hard reset over DTR/RTS;
-      serial logged the AP (`SSID=jesse-scanner IP=192.168.4.1`), a 30-byte
-      iBeacon payload within the 31-byte cap, passive BLE discovery ready, OTA
-      service started with a password set, and the HTTP server listening.
+- [x] **Board boots and brings up every subsystem — re-verified on current
+      `main`.** Hard reset over DTR/RTS after the 2026-09-16 flash; serial
+      logged the AP (`SSID=jesse-scanner IP=192.168.4.1`), the 30-byte iBeacon
+      payload within the 31-byte cap and byte-identical to the predicted frame
+      (`0201061AFF4C000215B9407F30F5F8466EAFF925565B57FE6D00010001C5`), passive
+      BLE discovery ready, `[ota] ready, password set` — which is the new
+      compile-time password guard surviving a real build and boot — the HTTP
+      server listening, and three sweeps at 14/15/17 networks. Lower counts
+      than the earlier pass's 24-30 from a different spot and time of day; the
+      sweep-to-sweep variance the README documents.
 - [x] **A client joined the AP and the server served the page.** Laptop
       associated, took `192.168.4.2` by DHCP, `GET /` returned `200` and 22,281
       bytes. The served body was diffed against `src/ui_page.h` — this is how
