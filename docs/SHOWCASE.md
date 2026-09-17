@@ -68,6 +68,6 @@ These optional tools are for development and documentation. They are not include
 
 ## Privacy note
 
-`data/` and the Wi-Fi and Bluetooth screenshots contain a real, unredacted capture from one location. That is deliberate: a survey tool documented with invented numbers demonstrates nothing. It is a single snapshot with no location tags, no traffic, and no repeated readings, and the BLE addresses are overwhelmingly the rotating, randomised kind. Publishing a *walk* — repeated readings tied to named places — is a different decision and has not been made here.
+`data/` and the Wi-Fi and Bluetooth screenshots contain a real capture from one location, with the identifier columns pseudonymised. That split is deliberate: a survey tool documented with invented numbers demonstrates nothing, but the SSID and BLE-name columns were other people's, and an SSID set can locate a capture with no GPS attached. Counts, channels, RSSI, hidden-network totals, BLE addresses and company IDs are exactly as observed; SSIDs read `AP-nn` and BLE names read `Device-n`, stable across sweeps. Mapping tables are not committed. It is a single snapshot with no location tags, no traffic, and no repeated readings. Publishing a *walk* — repeated readings tied to named places — is a different decision and has not been made here.
 
 Before publishing a capture of your own, confirm you are comfortable with the names it contains, and never capture the secret header, serial credentials, or a home station SSID you did not intend to show.

@@ -7,13 +7,13 @@
 Connect your phone to `jesse-scanner`, open `http://192.168.4.1`, and inspect nearby radio activity without a cloud account or a companion app. The board hosts the interface; your phone is the display.
 
 **Platform:** classic ESP32 / ESP32-WROOM-32 · Arduino · PlatformIO  
-**Status:** experimental, pre-release. The heatmap and CSV path has [known correctness issues](docs/RELEASE_CHECKLIST.md) that must be resolved before a public release.
+**Status:** experimental, pre-release. The heatmap correctness blockers are fixed and covered by host tests, and the project is Apache-2.0 licensed. What remains before a public release is the open-AP and unauthenticated-HTTP boundary decision, and a device acceptance pass on reflashed firmware. See the [release checklist](docs/RELEASE_CHECKLIST.md).
 
 ## See it in action
 
 These are **screenshots of the real embedded web interface**, rendered in Chromium against data the board actually recorded.
 
-The **Networks**, **Channels** and **Bluetooth** tabs are a live capture taken on 2026-09-16 from an ESP32-WROOM-32 running this firmware: 39 real networks over six sweeps and 28 real BLE advertisers, with real SSIDs, real addresses, and real RSSI. The raw rows are committed under [`docs/data/`](docs/data). The **walk-around log** is still demonstration data — no walk has been performed yet — and every screenshot states on the image which of the two it is.
+The **Networks**, **Channels** and **Bluetooth** tabs are a live capture taken on 2026-09-16 from an ESP32-WROOM-32 running this firmware: 39 real networks over six sweeps and 28 real BLE advertisers, with real channels, real RSSI, real BLE addresses and real company IDs. Network names are the one thing substituted: SSIDs read `AP-01`…`AP-35` and BLE device names read `Device-1`…`Device-4`, because those columns were other people's, and an SSID list is a location fingerprint even without GPS. Each pseudonym is stable across all six sweeps, so the data stays internally consistent. The raw rows are committed under [`docs/data/`](docs/data). The **walk-around log** is still demonstration data — no walk has been performed yet — and every screenshot states on the image which of the two it is.
 
 Rendering the real UI is still not the same as hardware acceptance testing; see the [release checklist](docs/RELEASE_CHECKLIST.md).
 
@@ -22,7 +22,7 @@ Rendering the real UI is still not the same as hardware acceptance testing; see 
 <td width="50%" valign="top">
 <h3>01 · Nearby networks</h3>
 <p>Sort nearby networks by signal strength. See the SSID, channel, encryption indicator, and RSSI in one view. Captured: 39 real networks, strongest <b>&minus;21 dBm</b>, weakest <b>&minus;96 dBm</b>, 4 hidden.</p>
-<a href="docs/images/networks.png"><img src="docs/images/networks.png" alt="Networks tab showing 39 real SSIDs from a live capture, sorted strongest first" width="100%"></a>
+<a href="docs/images/networks.png"><img src="docs/images/networks.png" alt="Networks tab showing 39 networks from a live capture with pseudonymised SSIDs, sorted strongest first" width="100%"></a>
 </td>
 <td width="50%" valign="top">
 <h3>02 · Channel analyzer</h3>
@@ -34,11 +34,11 @@ Rendering the real UI is still not the same as hardware acceptance testing; see 
 <td width="50%" valign="top">
 <h3>03 · Bluetooth discovery</h3>
 <p>Request a five-second passive BLE scan. View advertised names, addresses, RSSI, and manufacturer IDs. The iBeacon pauses during discovery. Captured: 28 real advertisers, only <b>4 named</b> — most modern phones advertise a rotating address and nothing else.</p>
-<a href="docs/images/bluetooth.png"><img src="docs/images/bluetooth.png" alt="Bluetooth tab showing 28 real BLE advertisers with addresses, signal levels and manufacturer IDs" width="100%"></a>
+<a href="docs/images/bluetooth.png"><img src="docs/images/bluetooth.png" alt="Bluetooth tab showing 28 real BLE advertisers with addresses, signal levels and manufacturer IDs, device names pseudonymised" width="100%"></a>
 </td>
 <td width="50%" valign="top">
 <h3>04 · Walk-around signal log</h3>
-<p>Tag a spot and collect up to six network readings per snapshot. Inspect the log and use the CSV export control. <b>Demonstration data</b> — this is the one tab not yet backed by a real walk. Experimental; see the release checklist.</p>
+<p>Tag a spot and collect up to six network readings per snapshot. Inspect the log and use the CSV export control. <b>Demonstration data</b> — this is the one tab not yet backed by a real walk, and no walk-around has been verified on hardware. See the release checklist.</p>
 <a href="docs/images/heatmap.png"><img src="docs/images/heatmap.png" alt="Heatmap tab showing synthetic Studio and Porch signal samples, tagging controls, and CSV download" width="100%"></a>
 </td>
 </tr>
@@ -86,7 +86,7 @@ python3 tools/capture_showcase.py --fixtures live-fixtures.json
 | BLE discovery | On-demand, five-second **passive BLE** scan, with up to 32 stored devices. A manufacturer ID identifies an advertised field, not a verified product identity. |
 | iBeacon | Non-connectable advertising between BLE discovery sessions. UUID, major, minor, and advertised measured-power byte are configured in `src/main.cpp`. |
 | Signal log | Up to 16 tagged snapshots × 6 network rows, stored in RAM. Oldest snapshots roll off; rebooting clears the log. |
-| OTA support | Password-configured ArduinoOTA with two app partitions. An actual OTA transfer still needs release verification. |
+| OTA support | Password-configured ArduinoOTA with two app partitions. The build refuses a placeholder or sub-8-character password. An actual OTA transfer still needs release verification. |
 | Browser UI | Self-contained HTML/CSS/JavaScript served from firmware. No external fonts, JavaScript libraries, or cloud APIs. |
 
 ### One radio, coordinated jobs
@@ -138,6 +138,12 @@ The access point is not an internet connection. It does not automatically open a
 
 The firmware builds without a secret header; OTA is disabled when `OTA_PASSWORD` is not defined.
 
+`OTA_PASSWORD` is checked at compile time, because the access point is open and
+an unset password means anyone in radio range can flash the board. The build
+fails if the value is still the `change-me` placeholder from
+`include/secrets.example.h`, or if it is shorter than 8 characters. To build
+with OTA switched off instead, comment the `#define` out entirely.
+
 ```sh
 cp include/secrets.example.h include/secrets.h
 ```
@@ -159,9 +165,9 @@ The default OTA target is `192.168.4.1`. For an explicitly configured station co
 - **A tagged log, not a floor-plan heatmap.** There is no GPS, map interpolation, or coverage overlay.
 - **Network count, not channel utilization.** The channel view cannot measure throughput, airtime, noise, or non-Wi-Fi interference.
 - **One spot is not a site survey.** The committed capture is six sweeps from a single location. It shows drift and congestion honestly; it does not map a building.
-- **Volatile storage.** Download useful readings before rebooting. CSV correctness and BSSID capture require the fixes listed in the [release checklist](docs/RELEASE_CHECKLIST.md).
+- **Volatile storage.** Download useful readings before rebooting — the log lives in RAM and does not survive a reset. Reboot-loss behaviour is documented but has not been exercised on hardware.
 - **An open local interface.** Anyone who can reach the HTTP server can read results, trigger scans, and clear the log. Do not expose it to an untrusted LAN or the internet. “Local” does not mean authenticated.
-- **Use responsibly.** Survey only where you have permission and follow local radio/privacy rules. This repository deliberately publishes one real capture, unredacted, because a survey tool documented with invented numbers is not evidence of anything. That is a considered choice about one snapshot from one spot: it contains no location tags and no traffic, and the BLE addresses in it are overwhelmingly the rotating, randomised kind that identify nothing. Publishing a *walk* — repeated readings tied to named places — is a different decision, and this repo has not made it.
+- **Use responsibly.** Survey only where you have permission and follow local radio/privacy rules. This repository deliberately publishes one real capture, because a survey tool documented with invented numbers is not evidence of anything — but it publishes the *measurements*, not the names. Every count, channel, RSSI and BLE company ID is as captured; the SSID and BLE-name columns are pseudonymised, because those columns belong to neighbours and because an SSID set can be matched against public wardriving databases to locate the capture even with no GPS attached. There is no traffic and no location tag in the data, and the BLE addresses that remain are overwhelmingly the rotating, randomised kind that identify nothing. Publishing a *walk* — repeated readings tied to named places — is a further decision, and this repo has not made it.
 
 ## Development and checks
 
@@ -175,14 +181,30 @@ c++ -std=c++11 -Wall -Wextra -Werror -Isrc \
   tests/test_radio_coordinator.cpp -o .test-bin/radio
 .test-bin/radio
 
+# Host-side tests of the real CSV exporter, round-tripped through a parser.
+c++ -std=c++11 -Wall -Wextra -Werror \
+  tests/test_heatmap_csv.cpp -o .test-bin/heatmap_csv
+.test-bin/heatmap_csv
+
 # Firmware compilation.
 pio run -e esp32dev
 ```
 
-For real-browser presentation checks and screenshot regeneration, follow [docs/SHOWCASE.md](docs/SHOWCASE.md). To capture from your own board, see the commands above. The older `tests/test_heatmap_handlers.cpp` copies handler logic and prints a success message without validating the complete CSV; it is **not** an acceptance test for the firmware export.
+For real-browser presentation checks and screenshot regeneration, follow [docs/SHOWCASE.md](docs/SHOWCASE.md). To capture from your own board, see the commands above.
+
+`tests/test_heatmap_csv.cpp` compiles `src/heatmap_csv.h` — the exact encoder the
+firmware ships — and reads its output back with an RFC 4180 parser written
+separately from it. Its predecessor kept a private copy of the encoder and a
+128-byte `String`, so it reported success while the shipped code wrote JSON
+escaping into a `.csv` and truncated long exports. A host encoder test is still
+not a device test: downloading the file from the board and parsing it remains on
+the [release checklist](docs/RELEASE_CHECKLIST.md).
 
 ```text
+LICENSE                     Apache License 2.0
+NOTICE                      Copyright and attribution notice
 src/main.cpp                Radio setup, surveys, HTTP handlers, OTA
+src/heatmap_csv.h            Heatmap storage types + host-testable CSV exporter
 src/radio_coordinator.h      Host-testable radio state machine
 src/ui_page.h                The actual embedded browser interface
 include/secrets.example.h    Safe configuration template
@@ -198,4 +220,6 @@ tools/capture_showcase.py    Renders the embedded UI from a chosen fixture set
 
 This is a pre-release project, not yet a validated public release. Read the [release checklist](docs/RELEASE_CHECKLIST.md) for correctness issues, verification gaps, and the distinction between browser fixtures and board testing.
 
-A distribution license has not yet been selected. No open-source license is implied by this README.
+Licensed under the [Apache License 2.0](LICENSE) — permissive use, modification
+and redistribution, with an explicit patent grant. See [NOTICE](NOTICE) for the
+copyright and attribution notice that Apache 2.0 asks redistributors to carry.

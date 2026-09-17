@@ -29,6 +29,7 @@
 #include <WebServer.h>
 #include <WiFi.h>
 
+#include "heatmap_csv.h"
 #include "radio_coordinator.h"
 #include "ui_page.h"
 
@@ -38,6 +39,15 @@
 #if __has_include("secrets.h")
   #include "secrets.h"
 #endif
+
+// Compile-time guards for OTA_PASSWORD, used in setup_ota(). C++11 constexpr
+// permits a single return statement, hence the recursion.
+constexpr size_t ota_password_length(const char* s) {
+  return *s ? 1 + ota_password_length(s + 1) : 0;
+}
+constexpr bool ota_password_equals(const char* a, const char* b) {
+  return *a == *b && (*a == '\0' || ota_password_equals(a + 1, b + 1));
+}
 
 // ─── Pin map ────────────────────────────────────────────────────────────────
 constexpr uint8_t PIN_WIFI_LED = 2;   // onboard blue LED — scan heartbeat
@@ -53,8 +63,12 @@ const IPAddress AP_MASK(255, 255, 255, 0);
 WebServer server(80);
 
 // ─── WiFi scan state ────────────────────────────────────────────────────────
+// bssid is copied here while the scan result is still alive. WiFi.BSSIDstr(i)
+// is only valid until WiFi.scanDelete(), and the heatmap snapshot runs well
+// after that — reading it there returned nothing.
 struct ScanEntry {
   String  ssid;
+  String  bssid;
   int32_t rssi;
   uint8_t channel;
   bool    encrypted;
@@ -91,23 +105,14 @@ BLEScan* g_bleScan = nullptr;
 volatile bool g_bleScanCallbackPending = false;
 
 // ─── RSSI heatmap state ─────────────────────────────────────────────────────
-// A snapshot is a tagged bundle of up to 6 APs (BSSID, channel, RSSI) sampled
-// at one spot. 16 snapshots × 6 APs = 96 rows in RAM, plus the JSON encoding
-// fits comfortably on a 4 MB flash and 320 KB heap.
-struct HeatmapRow {
-  String  ssid;
-  String  bssid;
-  uint8_t channel;
-  int32_t rssi;
-};
-struct HeatmapSample {
-  String         tag;
-  unsigned long  timestamp;
-  uint8_t        rowCount;
-  HeatmapRow     rows[6];
-};
-constexpr size_t MAX_HEATMAP_SAMPLES = 16;
-constexpr size_t MAX_HEATMAP_ROWS_PER_SAMPLE = 6;
+// A snapshot is a tagged bundle of up to 6 APs (SSID, BSSID, channel, RSSI)
+// sampled at one spot. The storage types and the CSV encoder live in
+// heatmap_csv.h so the host tests exercise the shipped encoder, not a copy.
+using HeatmapRow    = heatmap::Row<String>;
+using HeatmapSample = heatmap::Sample<String>;
+constexpr size_t MAX_HEATMAP_SAMPLES         = heatmap::MAX_SAMPLES;
+constexpr size_t MAX_HEATMAP_ROWS_PER_SAMPLE = heatmap::MAX_ROWS_PER_SAMPLE;
+
 HeatmapSample g_heatmapSamples[MAX_HEATMAP_SAMPLES];
 size_t g_heatmapCount = 0;
 volatile bool g_heatmapSnapshotPending = false;
@@ -115,6 +120,26 @@ String g_heatmapPendingTag;
 unsigned long g_heatmapPendingAt = 0;
 unsigned long g_heatmapSnapshotAt = 0;
 constexpr unsigned long HEATMAP_SNAPSHOT_COOLDOWN_MS = 2000;
+
+// A tag press must be answered by a sweep that finished after the press. This
+// counter is the evidence: schedule_heatmap_snapshot() records the generation
+// it needs and the capture waits for it. Without it, a press logged whichever
+// sweep already sat in g_entries — up to SCAN_INTERVAL_MS stale — while the
+// API reported a fresh capture.
+unsigned long g_scanCompletedCount = 0;
+unsigned long g_heatmapPendingAfterScan = 0;
+// A sweep takes roughly 2-4 s. Give a pending press generous slack before
+// dropping it, so a BLE scan holding the radio does not strand it forever.
+constexpr unsigned long HEATMAP_PENDING_TIMEOUT_MS = 15000;
+
+// Why a press was refused, so the HTTP layer can stop reporting success
+// unconditionally.
+enum class SnapshotRequest {
+  Scheduled,
+  RejectedOta,
+  RejectedBleBusy,
+  RejectedCooldown,
+};
 
 
 // Estimote's public development UUID — commonly recognized by BLE scanners.
@@ -139,7 +164,7 @@ void handle_heatmap_scan();
 void handle_heatmap_json();
 void handle_heatmap_csv();
 void handle_heatmap_clear();
-void schedule_heatmap_snapshot(const String& tag);
+SnapshotRequest schedule_heatmap_snapshot(const String& tag);
 void capture_heatmap_snapshot(const String& tag);
 
 // ─── Arduino entry points ───────────────────────────────────────────────────
@@ -195,12 +220,14 @@ void loop() {
       g_entryCount = (size_t)min(n, (int)MAX_ENTRIES);
       for (size_t i = 0; i < g_entryCount; i++) {
         g_entries[i].ssid      = WiFi.SSID(i);
+        g_entries[i].bssid     = WiFi.BSSIDstr(i);
         g_entries[i].rssi      = WiFi.RSSI(i);
         g_entries[i].channel   = WiFi.channel(i);
         g_entries[i].encrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
       }
-      WiFi.scanDelete();
+      WiFi.scanDelete();  // every field above must already be copied out
       g_scanInProgress = false;
+      g_scanCompletedCount++;
       Serial.printf("[scan] %u networks\n", (unsigned)g_entryCount);
       digitalWrite(PIN_WIFI_LED, HIGH);
       g_wifiLedOnAt = millis();
@@ -215,13 +242,16 @@ void loop() {
     g_wifiLedOnAt = 0;
   }
 
-  // A heatmap snapshot wants the freshest scan. If a sweep is mid-flight,
-  // capture the next result when it lands. Otherwise kick a fresh one now.
+  // A heatmap snapshot wants a sweep that completed after the press — never
+  // whatever was already sitting in g_entries.
   if (g_heatmapSnapshotPending && !g_scanInProgress) {
-    if (g_entryCount > 0) {
+    if (g_scanCompletedCount >= g_heatmapPendingAfterScan) {
       capture_heatmap_snapshot(g_heatmapPendingTag);
+    } else if (millis() - g_heatmapPendingAt > HEATMAP_PENDING_TIMEOUT_MS) {
+      Serial.println("[heatmap] snapshot dropped — no sweep completed in time");
+      g_heatmapSnapshotPending = false;
     } else {
-      start_wifi_scan();
+      start_wifi_scan();  // no-op while BLE or OTA holds the radio
     }
   }
 
@@ -407,6 +437,18 @@ void setup_ota() {
   Serial.println("[ota] Refusing unauthenticated updates on an open AP.");
   return;
 #else
+  // A placeholder password is worse than no password: the AP is open and the
+  // placeholder is published in include/secrets.example.h for anyone to read.
+  // A board that boots with "change-me" is a board anyone in radio range can
+  // reflash, so this is a build failure rather than a runtime warning.
+  static_assert(!ota_password_equals(OTA_PASSWORD, "change-me"),
+                "OTA_PASSWORD is still the placeholder from "
+                "include/secrets.example.h — set a real one, or comment the "
+                "#define out to build with OTA disabled.");
+  static_assert(ota_password_length(OTA_PASSWORD) >= 8,
+                "OTA_PASSWORD must be at least 8 characters — it is the only "
+                "thing protecting firmware upload on an open access point.");
+
   ArduinoOTA.setHostname("jesse-scanner");
   ArduinoOTA.setPassword(OTA_PASSWORD);
 
@@ -490,7 +532,11 @@ static void shift_oldest_heatmap_sample() {
 
 void capture_heatmap_snapshot(const String& tag) {
   g_heatmapSnapshotPending = false;
-  if (g_otaActive || g_entryCount == 0) return;
+  if (g_otaActive) return;
+  if (g_entryCount == 0) {
+    Serial.println("[heatmap] snapshot dropped — the sweep found no networks");
+    return;
+  }
 
   if (g_heatmapCount >= MAX_HEATMAP_SAMPLES) {
     shift_oldest_heatmap_sample();
@@ -500,8 +546,9 @@ void capture_heatmap_snapshot(const String& tag) {
   sample.timestamp = millis();
   sample.rowCount = (uint8_t)min<size_t>(MAX_HEATMAP_ROWS_PER_SAMPLE, g_entryCount);
 
-  // Sort the strongest APs into a small array. We pull BSSID and RSSI here
-  // because they're attached to the last scan and disappear with WiFi.scanDelete.
+  // Rank the strongest APs. Every field comes from g_entries, which was filled
+  // while the scan result was still alive; WiFi.BSSIDstr() would return nothing
+  // here, because the sweep is deleted the moment it completes.
   struct Ranked { int32_t rssi; size_t index; };
   Ranked ranked[MAX_ENTRIES];
   for (size_t i = 0; i < g_entryCount; i++) {
@@ -521,7 +568,7 @@ void capture_heatmap_snapshot(const String& tag) {
     sample.rows[i].ssid    = g_entries[src].ssid;
     sample.rows[i].channel = g_entries[src].channel;
     sample.rows[i].rssi    = g_entries[src].rssi;
-    sample.rows[i].bssid   = WiFi.BSSIDstr(src);
+    sample.rows[i].bssid   = g_entries[src].bssid;
   }
   g_heatmapSamples[g_heatmapCount++] = sample;
   g_heatmapSnapshotAt = millis();
@@ -530,25 +577,32 @@ void capture_heatmap_snapshot(const String& tag) {
                 (unsigned)g_heatmapCount);
 }
 
-void schedule_heatmap_snapshot(const String& tag) {
-  if (g_otaActive) return;
-  // Reject presses that arrive during a BLE scan: the radio is unavailable.
+SnapshotRequest schedule_heatmap_snapshot(const String& tag) {
+  if (g_otaActive) return SnapshotRequest::RejectedOta;
+  // Refuse presses that arrive during a BLE scan: the radio is unavailable.
   if (g_radio.state() == RadioState::BleRequested ||
       g_radio.state() == RadioState::BleScanning) {
-    Serial.println("[heatmap] snapshot ignored — BLE scan in progress");
-    return;
+    Serial.println("[heatmap] snapshot refused — BLE scan in progress");
+    return SnapshotRequest::RejectedBleBusy;
   }
-  unsigned long now = millis();
-  if (now - g_heatmapSnapshotAt < HEATMAP_SNAPSHOT_COOLDOWN_MS) {
-    Serial.println("[heatmap] snapshot ignored — cooldown");
-    return;
+  const unsigned long now = millis();
+  // g_heatmapSnapshotAt is 0 until the first capture, so guard against the
+  // cooldown firing on a press made in the first two seconds after boot.
+  if (g_heatmapSnapshotAt &&
+      now - g_heatmapSnapshotAt < HEATMAP_SNAPSHOT_COOLDOWN_MS) {
+    Serial.println("[heatmap] snapshot refused — cooldown");
+    return SnapshotRequest::RejectedCooldown;
   }
   g_heatmapPendingTag = tag;
+  g_heatmapPendingAt = now;
   g_heatmapSnapshotPending = true;
-  // If a sweep is mid-flight, wait for the next result. Otherwise trigger one.
-  if (!g_scanInProgress && g_entryCount == 0) {
+  // Demand one sweep that completes from here on. A sweep already in flight
+  // counts, because it lands after the press. Otherwise start one now.
+  g_heatmapPendingAfterScan = g_scanCompletedCount + 1;
+  if (!g_scanInProgress) {
     start_wifi_scan();
   }
+  return SnapshotRequest::Scheduled;
 }
 
 // ─── HTTP handlers ──────────────────────────────────────────────────────────
@@ -634,13 +688,31 @@ void handle_heatmap_scan() {
   String tag = server.arg("tag");
   tag.trim();
   if (tag.length() > 24) tag = tag.substring(0, 24);
-  if (g_otaActive) {
-    server.send(409, "application/json", "{\"accepted\":false,\"error\":\"OTA active\"}");
-    return;
+  switch (schedule_heatmap_snapshot(tag)) {
+    case SnapshotRequest::Scheduled:
+      server.send(202, "application/json", "{\"accepted\":true,\"tag\":\"" +
+                                    json_escape(tag) + "\"}");
+      return;
+    case SnapshotRequest::RejectedOta:
+      server.send(409, "application/json",
+                  "{\"accepted\":false,\"error\":\"firmware update in progress\"}");
+      return;
+    case SnapshotRequest::RejectedBleBusy:
+      server.send(409, "application/json",
+                  "{\"accepted\":false,\"error\":\"Bluetooth scan is using the radio\"}");
+      return;
+    case SnapshotRequest::RejectedCooldown: {
+      const unsigned long elapsed = millis() - g_heatmapSnapshotAt;
+      const unsigned long remaining =
+          elapsed < HEATMAP_SNAPSHOT_COOLDOWN_MS
+              ? HEATMAP_SNAPSHOT_COOLDOWN_MS - elapsed
+              : 0;
+      server.send(429, "application/json",
+                  "{\"accepted\":false,\"error\":\"too soon after the last sample\","
+                  "\"retry_after_ms\":" + String(remaining) + "}");
+      return;
+    }
   }
-  schedule_heatmap_snapshot(tag);
-  server.send(202, "application/json", "{\"accepted\":true,\"tag\":\"" +
-                                json_escape(tag) + "\"}");
 }
 
 void handle_heatmap_json() {
@@ -668,24 +740,9 @@ void handle_heatmap_json() {
 }
 
 void handle_heatmap_csv() {
-  String csv = "tag,epoch_ms,age_s,ssid,bssid,channel,rssi\n";
-  unsigned long now = millis();
-  for (size_t sampleIdx = 0; sampleIdx < g_heatmapCount; sampleIdx++) {
-    const HeatmapSample& sample = g_heatmapSamples[sampleIdx];
-    unsigned long ageSeconds = (now - sample.timestamp) / 1000UL;
-    // millis() overflows after ~49 days. The CSV stays readable for ad-hoc
-    // analysis; a long-running survey should subtract boot-time anchor.
-    for (uint8_t rowIdx = 0; rowIdx < sample.rowCount; rowIdx++) {
-      const HeatmapRow& row = sample.rows[rowIdx];
-      csv += json_escape(sample.tag) + ",";
-      csv += String(sample.timestamp) + ",";
-      csv += String(ageSeconds) + ",";
-      csv += json_escape(row.ssid) + ",";
-      csv += json_escape(row.bssid) + ",";
-      csv += String(row.channel) + ",";
-      csv += String(row.rssi) + "\n";
-    }
-  }
+  // RFC 4180 encoding lives in heatmap_csv.h, which tests/test_heatmap_csv.cpp
+  // compiles and round-trips through a parser. Do not inline it again here.
+  String csv = heatmap::build_csv<String>(g_heatmapSamples, g_heatmapCount, millis());
   server.sendHeader("Content-Disposition",
                     "attachment; filename=\"jesse-heatmap.csv\"");
   server.send(200, "text/csv", csv);

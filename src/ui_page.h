@@ -427,11 +427,20 @@ document.getElementById('heatmapSnapshot').addEventListener('click', async funct
   var tag = (tagInput.value || '').trim() || 'spot';
   try {
     var response = await fetch('/heatmap/scan?tag=' + encodeURIComponent(tag), { method: 'POST' });
-    if (!response.ok && response.status !== 202) throw new Error('snapshot rejected');
+    var result = {};
+    try { result = await response.json(); } catch (parseError) { result = {}; }
+    if (!response.ok || result.accepted !== true) {
+      var reason = result.error || 'the board refused the request';
+      var wait = result.retry_after_ms
+        ? ' Retry in ' + Math.ceil(result.retry_after_ms / 1000) + 's.'
+        : '';
+      document.getElementById('heatmapStatus').textContent = 'Not logged: ' + reason + '.' + wait;
+      return;
+    }
     document.getElementById('heatmapStatus').textContent = 'Tagged "' + tag + '". Waiting for the next sweep to finish…';
     setTimeout(pollHeatmap, 1200);
   } catch (error) {
-    document.getElementById('heatmapStatus').textContent = 'Snapshot rejected. Try again on the next sweep.';
+    document.getElementById('heatmapStatus').textContent = 'Not logged: the board did not answer.';
   } finally {
     setTimeout(function () { heatmapSnapshotInFlight = false; button.disabled = false; }, 1500);
   }

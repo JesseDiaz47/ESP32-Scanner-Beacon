@@ -106,7 +106,7 @@ def main():
             # This is fixture output, deliberately NOT a test of firmware CSV.
             text = io.StringIO()
             writer = csv.writer(text)
-            writer.writerow(["tag", "epoch_ms", "age_s", "ssid", "bssid", "channel", "rssi"])
+            writer.writerow(["tag", "boot_ms", "age_s", "ssid", "bssid", "channel", "rssi"])
             for row in state["heatmap"]:
                 writer.writerow([row["tag"], 100000 - row["age"] * 1000, row["age"], row["ssid"], "", row["channel"], row["rssi"]])
             route.fulfill(body=text.getvalue(), content_type="text/csv", headers={"Content-Disposition": 'attachment; filename="demo-heatmap.csv"'})
