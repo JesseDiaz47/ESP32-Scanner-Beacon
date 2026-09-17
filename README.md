@@ -13,7 +13,7 @@ Connect your phone to `jesse-scanner`, open `http://192.168.4.1`, and inspect ne
 
 These are **screenshots of the real embedded web interface**, rendered in Chromium against data the board actually recorded.
 
-The **Networks**, **Channels** and **Bluetooth** tabs are a live capture taken on 2026-09-16 from an ESP32-WROOM-32 running this firmware: 39 real networks over six sweeps and 28 real BLE advertisers, with real channels, real RSSI, real BLE addresses and real company IDs. Network names are the one thing substituted: SSIDs read `AP-01`…`AP-35` and BLE device names read `Device-1`…`Device-4`, because those columns were other people's, and an SSID list is a location fingerprint even without GPS. Each pseudonym is stable across all six sweeps, so the data stays internally consistent. The raw rows are committed under [`docs/data/`](docs/data). The **walk-around log** is still demonstration data — no walk has been performed yet — and every screenshot states on the image which of the two it is.
+The **Networks**, **Channels** and **Bluetooth** tabs are a live capture taken on 2026-09-16 from an ESP32-WROOM-32 running this firmware: 39 real networks over six sweeps and 28 real BLE advertisers, with real channels, real RSSI and real company IDs. Identifiers are the one thing substituted, because those columns are other people's. SSIDs read `AP-01`…`AP-35` and BLE device names read `Device-1`…`Device-4` — an SSID list is a location fingerprint even without GPS. BLE addresses that rotate on their own are published exactly as captured (18 of 28, which is what makes them safe to publish); the other 10 are static-random or public, so they are replaced with stand-ins that preserve each address's class. Every pseudonym is stable across all six sweeps, so the data stays internally consistent, and no measurement is altered. The raw rows are committed under [`docs/data/`](docs/data). The **walk-around log** is still demonstration data — no walk has been performed yet — and every screenshot states on the image which of the two it is.
 
 Rendering the real UI is still not the same as hardware acceptance testing; see the [release checklist](docs/RELEASE_CHECKLIST.md).
 
@@ -167,7 +167,7 @@ The default OTA target is `192.168.4.1`. For an explicitly configured station co
 - **One spot is not a site survey.** The committed capture is six sweeps from a single location. It shows drift and congestion honestly; it does not map a building.
 - **Volatile storage.** Download useful readings before rebooting — the log lives in RAM and does not survive a reset. Reboot-loss behaviour is documented but has not been exercised on hardware.
 - **An open local interface.** Anyone who can reach the HTTP server can read results, trigger scans, and clear the log. Do not expose it to an untrusted LAN or the internet. “Local” does not mean authenticated.
-- **Use responsibly.** Survey only where you have permission and follow local radio/privacy rules. This repository deliberately publishes one real capture, because a survey tool documented with invented numbers is not evidence of anything — but it publishes the *measurements*, not the names. Every count, channel, RSSI and BLE company ID is as captured; the SSID and BLE-name columns are pseudonymised, because those columns belong to neighbours and because an SSID set can be matched against public wardriving databases to locate the capture even with no GPS attached. There is no traffic and no location tag in the data, and the BLE addresses that remain are overwhelmingly the rotating, randomised kind that identify nothing. Publishing a *walk* — repeated readings tied to named places — is a further decision, and this repo has not made it.
+- **Use responsibly.** Survey only where you have permission and follow local radio/privacy rules. See [SECURITY.md](SECURITY.md) for the trusted environment this is built for and what the open AP exposes. This repository deliberately publishes one real capture, because a survey tool documented with invented numbers is not evidence of anything — but it publishes the *measurements*, not the identifiers. Every count, channel, RSSI and BLE company ID is as captured; SSIDs, BLE names, and the 10 BLE addresses that do not rotate on their own are pseudonymised, because those columns belong to neighbours and because an SSID set can be matched against public wardriving databases to locate the capture even with no GPS attached. There is no traffic and no location tag in the data. Publishing a *walk* — repeated readings tied to named places — is a further decision, and this repo has not made it.
 
 ## Development and checks
 
@@ -203,6 +203,7 @@ the [release checklist](docs/RELEASE_CHECKLIST.md).
 ```text
 LICENSE                     Apache License 2.0
 NOTICE                      Copyright and attribution notice
+SECURITY.md                 Trusted environment, what the open AP exposes
 src/main.cpp                Radio setup, surveys, HTTP handlers, OTA
 src/heatmap_csv.h            Heatmap storage types + host-testable CSV exporter
 src/radio_coordinator.h      Host-testable radio state machine

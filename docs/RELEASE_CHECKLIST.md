@@ -3,12 +3,18 @@
 Review date: 2026-09-15. Hardware pass added 2026-09-16. Correctness blockers
 fixed 2026-09-16. This is a pre-release checklist, not a security certification.
 
-**Recommendation: keep the repository private until the open-AP boundary is
-written down and the device acceptance pass is completed on reflashed
-firmware.** The four correctness blockers below are fixed and covered by host
-tests that fail against the previous implementation; the project is Apache-2.0
-licensed; and the published capture now carries pseudonymised identifier
-columns. What is left is one security decision and time on the board.
+**Recommendation: the repository is ready to be made public.** The four
+correctness blockers are fixed and covered by host tests that fail against the
+previous implementation; the project is Apache-2.0 licensed; the published
+capture carries pseudonymised identifier columns, including the BLE addresses
+that do not rotate on their own; and `SECURITY.md` states the trusted
+environment and what the open AP exposes.
+
+The device acceptance pass below is **not** a release gate. The README calls the
+project experimental and pre-release, and this checklist is published alongside
+it, so what has and has not been exercised on hardware is a matter of record
+rather than a hidden claim. Those items gate calling the tool *finished*, not
+publishing it. Visibility is the owner's to change.
 
 > **The board now runs current `main`.** Flashed over USB on 2026-09-16 at
 > commit `5ededa8` (1,652,320 bytes written, hash verified, hard reset). The
@@ -85,10 +91,18 @@ columns. What is left is one security decision and time on the board.
       third-party data. One BLE device name carried the owner's initials.
       Mapping tables were not committed. `docs/data/capture-manifest.json`
       records the substitution and its file hashes were recomputed.
-      The BLE `address` column is still published as captured: 19 of 28
-      advertisers are rotating Apple addresses that identify nothing, which is
-      the argument the README makes. The remaining addresses are stable globals,
-      so whether to publish those is the one identifier decision still open.
+      **The BLE `address` column is now handled too.** Classified by the two
+      most significant bits per Core spec Vol 6 Part B 1.3: 18 of 28 are
+      resolvable or non-resolvable private addresses, which rotate on their own
+      and identify nothing, and those are published exactly as captured. The
+      other 10 are static-random or public — the firmware does not record the
+      advertisement's address-type flag, so the two cannot be told apart — and
+      each is replaced with a deterministic stand-in that preserves its address
+      class, keeping the published distribution truthful. Four of the ten were
+      the named devices, one of which was the owner's own wearable. An earlier
+      pass mis-classified these using the Ethernet locally-administered bit,
+      which does not apply to BLE; the corrected count is recorded here because
+      the README's "overwhelmingly rotating" claim depends on it.
 
 - [x] **Initial reachable-history pattern review completed.** All 5 reachable
       commits and 16 unique text blobs (118,621 bytes) were reviewed; the object
@@ -99,11 +113,18 @@ columns. What is left is one security decision and time on the board.
       heuristic review, not a guarantee: unreachable/hidden refs and ignored
       local files were out of scope. Repeat the check against the exact
       publication commit.
-- [ ] **Decide on the open AP and unauthenticated HTTP boundary.** Unchanged and
-      still open. Reading results, triggering BLE/heatmap requests, and clearing
-      the log do not require authentication. Optional station mode exposes that
-      same server to the joined network. Document the intended trusted
-      environment; consider AP protection before wider distribution.
+- [x] **The open AP and unauthenticated HTTP boundary is documented.**
+      `SECURITY.md` states the trusted environment the tool is built for — one
+      person, holding the board, surveying premises they are responsible for,
+      for the length of a walk — and tabulates every endpoint with what a
+      stranger in radio range can do by calling it. The realistic worst case is
+      named rather than glossed: read the survey, occupy the radio, or erase an
+      unexported log. It records that station mode widens that exposure to a
+      whole network and is off by default, that OTA is the one authenticated
+      path and why its password is a compile-time error, and what the tool
+      deliberately cannot do (no traffic capture, no injection, no outbound
+      request). It closes with the four changes to make before deploying more
+      widely, `/heatmap/clear` being the one that destroys work.
 - [x] **Weak OTA configuration is rejected.** `setup_ota()` fails the *build*
       rather than warning at runtime: `static_assert` rejects the `change-me`
       placeholder from `include/secrets.example.h` and any password shorter than
@@ -221,11 +242,11 @@ firmware's exporter; `tests/test_heatmap_csv.cpp` is.
 ## Publication sequence
 
 1. ~~Fix and test the blockers~~ — done. ~~Choose the license~~ — Apache-2.0.
-2. ~~Decide the real-capture disclosure~~ — identifier columns pseudonymised.
-   Write down the open-AP boundary, and decide whether the stable (non-rotating)
-   BLE addresses stay published.
-3. Reflash the board, then complete the device acceptance pass, or explicitly
-   narrow the release's supported features.
+2. ~~Decide the real-capture disclosure~~ — identifier columns pseudonymised,
+   non-rotating BLE addresses included. ~~Write down the open-AP boundary~~ —
+   `SECURITY.md`.
+3. ~~Reflash the board~~ — done, current `main`. Complete the device acceptance
+   pass when there is time on the board; it is not a gate on publishing.
 4. Review the actual diff and generated media; keep credentials and built
    firmware out of the commit.
 5. Push and change visibility only with explicit approval.
